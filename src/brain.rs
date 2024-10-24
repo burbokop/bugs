@@ -1,15 +1,12 @@
-use core::range::Range;
-use chromosome::Chromosome;
-use simple_neural_net::{normalizers, Arr, Layer as _};
 use crate::utils::{Color, Float};
+use chromosome::Chromosome;
+use core::range::Range;
+use simple_neural_net::{normalizers, Arr, Layer as _};
 
-simple_neural_net::compose_layers!(
-    Net,
-    16, 8, 8
-);
+simple_neural_net::compose_layers!(Net, 16, 8, 8);
 
 pub(crate) struct Brain {
-    net: Net<Float>
+    net: Net<Float>,
 }
 
 #[derive(Debug, Clone)]
@@ -37,22 +34,22 @@ pub(crate) struct Output {
 impl From<Input> for [Float; 16] {
     fn from(value: Input) -> Self {
         [
-          value.energy_level,
-          value.proximity_to_food,
-          value.direction_to_nearest_food,
-          value.age,
-          value.proximity_to_bug,
-          value.direction_to_nearest_bug,
-          value.color_of_nearest_bug.a,
-          value.color_of_nearest_bug.r,
-          value.color_of_nearest_bug.g,
-          value.color_of_nearest_bug.b,
-          value.baby_charge,
-          0.,
-          0.,
-          0.,
-          0.,
-          0.,
+            value.energy_level,
+            value.proximity_to_food,
+            value.direction_to_nearest_food,
+            value.age,
+            value.proximity_to_bug,
+            value.direction_to_nearest_bug,
+            value.color_of_nearest_bug.a,
+            value.color_of_nearest_bug.r,
+            value.color_of_nearest_bug.g,
+            value.color_of_nearest_bug.b,
+            value.baby_charge,
+            0.,
+            0.,
+            0.,
+            0.,
+            0.,
         ]
     }
 }
@@ -73,11 +70,11 @@ impl Brain {
         let genes = &chromosome.genes[range.start..range.end];
         assert_eq!(genes.len(), 208);
 
-        let l0w_genes= &genes[0..128];
-        let l1w_genes= &genes[128..192];
+        let l0w_genes = &genes[0..128];
+        let l1w_genes = &genes[128..192];
 
-        let l0b_genes= &genes[192..200];
-        let l1b_genes= &genes[200..208];
+        let l0b_genes = &genes[192..200];
+        let l1b_genes = &genes[200..208];
 
         let net: Net<f64> = Net::new(
             [
@@ -89,7 +86,8 @@ impl Brain {
                 (l0w_genes[080..096].try_into().unwrap(), l0b_genes[5]).into(),
                 (l0w_genes[096..112].try_into().unwrap(), l0b_genes[6]).into(),
                 (l0w_genes[112..128].try_into().unwrap(), l0b_genes[7]).into(),
-            ].into(),
+            ]
+            .into(),
             [
                 (l1w_genes[00..08].try_into().unwrap(), l1b_genes[0]).into(),
                 (l1w_genes[08..16].try_into().unwrap(), l1b_genes[1]).into(),
@@ -99,7 +97,8 @@ impl Brain {
                 (l1w_genes[40..48].try_into().unwrap(), l1b_genes[5]).into(),
                 (l1w_genes[48..56].try_into().unwrap(), l1b_genes[6]).into(),
                 (l1w_genes[56..64].try_into().unwrap(), l1b_genes[7]).into(),
-            ].into(),
+            ]
+            .into(),
         );
 
         Brain { net }

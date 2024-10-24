@@ -5,19 +5,19 @@ use complexible::complex_numbers::{Angle, ComplexNumber};
 use environment::Environment;
 use sdl2::gfx::primitives::DrawRenderer;
 use sdl2::pixels::Color;
-use sdl2::rect::{Point, Rect};
+use sdl2::rect::Rect;
 use sdl2::surface::Surface;
 use slint::{PlatformError, SharedPixelBuffer, Timer, TimerMode};
-use utils::Float;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Instant;
+use utils::Float;
 
-mod environment;
 mod brain;
-mod utils;
 mod bug;
 mod chromo_utils;
+mod environment;
+mod utils;
 
 slint::slint! {
     export { MainWindow } from "src/main.slint";
@@ -34,7 +34,7 @@ pub fn main() -> Result<(), PlatformError> {
         0. ..(width as Float),
         0. ..(height as Float),
         0. ..1.,
-        256
+        256,
     )));
 
     let main_window = MainWindow::new().unwrap();
@@ -43,18 +43,25 @@ pub fn main() -> Result<(), PlatformError> {
     let mut last_tick_instant = Instant::now();
     {
         let environment = environment.clone();
-        timer.start(TimerMode::Repeated, std::time::Duration::from_millis(1000 / 30), move || {
-            let now = Instant::now();
-            let dt = now - last_tick_instant;
-            last_tick_instant = now;
-            environment.borrow_mut().proceed(dt, &mut rng);
-        });
+        timer.start(
+            TimerMode::Repeated,
+            std::time::Duration::from_millis(1000 / 30),
+            move || {
+                let now = Instant::now();
+                let dt = now - last_tick_instant;
+                last_tick_instant = now;
+                environment.borrow_mut().proceed(dt, &mut rng);
+            },
+        );
     }
 
     main_window.on_render_environment(move |_: i64| -> slint::Image {
         let mut pixel_buffer = SharedPixelBuffer::new(width, height);
         let size = (pixel_buffer.width(), pixel_buffer.height());
-        assert_eq!(pixel_buffer.as_bytes().len(), pixel_buffer.width() as usize * pixel_buffer.height() as usize * 4);
+        assert_eq!(
+            pixel_buffer.as_bytes().len(),
+            pixel_buffer.width() as usize * pixel_buffer.height() as usize * 4
+        );
 
         {
             let surface = Surface::from_data(
@@ -62,8 +69,9 @@ pub fn main() -> Result<(), PlatformError> {
                 size.0,
                 size.1,
                 size.0 * 4,
-                sdl2::pixels::PixelFormatEnum::RGBA32
-            ).unwrap();
+                sdl2::pixels::PixelFormatEnum::RGBA32,
+            )
+            .unwrap();
 
             let mut canvas = surface.into_canvas().unwrap();
 
@@ -74,11 +82,13 @@ pub fn main() -> Result<(), PlatformError> {
 
             canvas.set_draw_color(Color::RGB(73, 54, 87));
             for food in environment.food() {
-                canvas.fill_rect(Rect::from_center(
-                    (food.x() as i32, food.y() as i32),
-                    (food.energy() * 10.) as u32,
-                    (food.energy() * 10.) as u32
-                )).unwrap();
+                canvas
+                    .fill_rect(Rect::from_center(
+                        (food.x() as i32, food.y() as i32),
+                        (food.energy() * 10.) as u32,
+                        (food.energy() * 10.) as u32,
+                    ))
+                    .unwrap();
             }
 
             canvas.set_draw_color(Color::RGB(255, 183, 195));
@@ -116,11 +126,3 @@ pub fn main() -> Result<(), PlatformError> {
 
     main_window.run()
 }
-
-
-
-
-
-
-
-

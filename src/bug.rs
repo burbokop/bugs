@@ -1,11 +1,21 @@
-use std::{cell::Ref, f64::consts::PI, fs, sync::atomic::{AtomicUsize, Ordering}, time::{Duration, Instant}};
+use std::{
+    cell::Ref,
+    f64::consts::PI,
+    sync::atomic::{AtomicUsize, Ordering},
+    time::{Duration, Instant},
+};
 
 use chromosome::Chromosome;
 use complexible::complex_numbers::{Angle, ComplexNumber};
-use rand::RngCore;
 use rand::Rng;
+use rand::RngCore;
 
-use crate::{brain::{self, Brain}, chromo_utils::ExtendedChromosome as _, environment::{Environment, EnvironmentRequest, Food}, utils::{Color, Float}};
+use crate::{
+    brain::{self, Brain},
+    chromo_utils::ExtendedChromosome as _,
+    environment::{Environment, EnvironmentRequest, Food},
+    utils::{Color, Float},
+};
 
 static NEXT_BUG_ID: AtomicUsize = AtomicUsize::new(0);
 
@@ -21,7 +31,7 @@ pub(crate) struct Bug {
     birth_instant: Instant,
     max_age: Duration,
     color: Color,
-    baby_charge: Float
+    baby_charge: Float,
 }
 
 impl Bug {
@@ -49,7 +59,7 @@ impl Bug {
     ) -> Self {
         let brain = Brain::new(&chromosome, 0..208);
         let body_genes = &chromosome.genes[208..256];
-        let max_age = Duration::from_secs_f64(body_genes[0]*60.);
+        let max_age = Duration::from_secs_f64(body_genes[0] * 60.);
         let color = Color {
             a: 1.,
             r: body_genes[1],
@@ -69,7 +79,7 @@ impl Bug {
             birth_instant: Instant::now(),
             max_age,
             color,
-            baby_charge: 0.
+            baby_charge: 0.,
         }
     }
 
@@ -100,19 +110,25 @@ impl Bug {
     }
 
     fn find_nearest_bug<'a>(&self, env: &'a Environment) -> Option<Ref<'a, Bug>> {
-        env.bugs().min_by(|a, b| self.dst_to_bug(a).partial_cmp(&self.dst_to_bug(b)).unwrap())
+        env.bugs()
+            .min_by(|a, b| self.dst_to_bug(a).partial_cmp(&self.dst_to_bug(b)).unwrap())
     }
 
     fn find_nearest_food<'a>(&self, env: &'a Environment) -> Option<&'a Food> {
-        env.food().iter().min_by(|a, b| self.dst_to_food(a).partial_cmp(&&self.dst_to_food(b)).unwrap())
+        env.food().iter().min_by(|a, b| {
+            self.dst_to_food(a)
+                .partial_cmp(&&self.dst_to_food(b))
+                .unwrap()
+        })
     }
 
     fn reproduce_asexually<R: RngCore>(&self, rng: &mut R) -> Bug {
         Bug::give_birth(
-            self.chromosome.mutated_ext(|_|1., 0.1, rng),
+            self.chromosome.mutated_ext(|_| 1., 0.1, rng),
             self.x,
             self.y,
-            rng.gen_range(0. ..(PI*2.)))
+            rng.gen_range(0. ..(PI * 2.)),
+        )
     }
 
     fn reproduce_sexually(&self, partner: &Bug) -> Bug {
@@ -131,7 +147,12 @@ impl Bug {
         completely_drained
     }
 
-    pub(crate) fn proceed<R: RngCore>(&mut self, env: &Environment, dt: Duration, rng: &mut R) -> Vec<EnvironmentRequest> {
+    pub(crate) fn proceed<R: RngCore>(
+        &mut self,
+        env: &Environment,
+        dt: Duration,
+        rng: &mut R,
+    ) -> Vec<EnvironmentRequest> {
         let nearest_food = self.find_nearest_food(env);
         let proximity_to_food = if let Some(nearest_food) = nearest_food {
             self.dst_to_food(nearest_food)
@@ -163,7 +184,12 @@ impl Bug {
         let color_of_nearest_bug = if let Some(nearest_bug) = &nearest_bug {
             nearest_bug.color.clone()
         } else {
-            Color { a: 0.,r: 0.,g: 0.,b: 0. }
+            Color {
+                a: 0.,
+                r: 0.,
+                g: 0.,
+                b: 0.,
+            }
         };
 
         let brain_input = brain::Input {
@@ -189,8 +215,9 @@ impl Bug {
 
         {
             let delta_distance = brain_output.velocity * dt.as_secs_f64();
-            let new_pos = ComplexNumber::from_cartesian(self.x, self.y)
-                .add(&ComplexNumber::from_polar(delta_distance, Angle::from_radians(self.rotation)));
+            let new_pos = ComplexNumber::from_cartesian(self.x, self.y).add(
+                &ComplexNumber::from_polar(delta_distance, Angle::from_radians(self.rotation)),
+            );
             self.x = new_pos.real();
             self.y = new_pos.imag();
             self.energy_level -= delta_distance * 0.001;
@@ -210,7 +237,7 @@ impl Bug {
                 requests.push(EnvironmentRequest::TransferEnergyFromFoodToBug {
                     food_id: nearest_food.id(),
                     bug_id: self.id,
-                    delta_energy: dt.as_secs_f64() * eat_rate
+                    delta_energy: dt.as_secs_f64() * eat_rate,
                 });
             }
         }

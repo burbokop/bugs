@@ -1,4 +1,3 @@
-
 pub type Float = f64;
 
 #[derive(Debug, Clone)]
