@@ -1,0 +1,34 @@
+import { Slider, GroupBox, HorizontalBox, VerticalBox } from "std-widgets.slint";
+export component MainWindow inherits Window {
+    pure callback render_environment(duration) -> image;
+
+    title: "The Bugs";
+    preferred-width: 800px;
+    preferred-height: 600px;
+
+    VerticalBox {
+        Text {
+            font-size: 20px;
+            text: "The Bugs Environment";
+            horizontal-alignment: center;
+        }
+
+        Image {
+            source: root.render_environment(animation-tick());
+            touch := TouchArea {
+                pointer-event(event) => {
+                    if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                        // TODO
+                    }
+                }
+                moved => {
+                    if (self.enabled && self.pressed) {
+                        // TODO
+                    }
+                }
+                mouse-cursor: self.pressed ? MouseCursor.grabbing : MouseCursor.grab;
+            }
+        }
+    }
+}
+
