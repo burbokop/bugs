@@ -1,26 +1,29 @@
 import { Slider, GroupBox, HorizontalBox, VerticalBox } from "std-widgets.slint";
 export component MainWindow inherits Window {
-    pure callback render_environment(duration) -> image;
+    pure callback pointer-event(PointerEventKind, length, length);
+
+    in property <image> canvas <=> canvas.source;
+    out property <int> requested-canvas-width: canvas.width / 1phx;
+    out property <int> requested-canvas-height: canvas.height / 1phx;
 
     title: "The Bugs";
     preferred-width: 800px;
     preferred-height: 600px;
 
-    VerticalBox {
-        Text {
-            font-size: 20px;
-            text: "The Bugs Environment";
-            horizontal-alignment: center;
+    HorizontalBox {
+        padding: 0;
+
+        VerticalBox {
+            Text {
+                font-size: 20px;
+                text: "The Bugs Environment";
+                horizontal-alignment: center;
+            }
         }
 
-        Image {
-            source: root.render_environment(animation-tick());
+        canvas := Image {
             touch := TouchArea {
-                pointer-event(event) => {
-                    if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
-                        // TODO
-                    }
-                }
+                pointer-event(event) => { root.pointer-event(event.kind, self.mouse-x, self.mouse-y); }
                 moved => {
                     if (self.enabled && self.pressed) {
                         // TODO
