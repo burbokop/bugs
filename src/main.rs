@@ -3,11 +3,13 @@
 
 use complexible::complex_numbers::{Angle, ComplexNumber};
 use environment::Environment;
+use math::Point;
 use sdl2::gfx::primitives::DrawRenderer;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::surface::Surface;
-use slint::{ComponentHandle, Image, PlatformError, SharedPixelBuffer, Timer, TimerMode};
+use slint::{ComponentHandle, Image, PlatformError, RgbaColor, SharedPixelBuffer, Timer, TimerMode};
+use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 use std::time::Instant;
@@ -18,21 +20,22 @@ mod bug;
 mod chromo_utils;
 mod environment;
 mod utils;
+mod math;
+
+fn colorToRgbaColor(c: &utils::Color) -> RgbaColor<f32> {
+    RgbaColor { alpha: c.a as f32, red: c.r as f32, green: c.g as f32, blue: c.b as f32 }
+}
 
 slint::slint! {
-    export { MainWindow } from "src/main.slint";
+    export { MainWindow, BugInfo } from "src/main.slint";
 }
 
 fn render(
-    weak_environment: &Weak<RefCell<Environment>>,
+    environment: &Environment,
+    state: &State,
     requested_canvas_width: u32,
     requested_canvas_height: u32,
 ) -> Image {
-    println!(
-        "r: {:?}, {:?}",
-        requested_canvas_width, requested_canvas_height
-    );
-
     let mut pixel_buffer = SharedPixelBuffer::new(requested_canvas_width, requested_canvas_height);
     let size = (pixel_buffer.width(), pixel_buffer.height());
     assert_eq!(
@@ -55,14 +58,11 @@ fn render(
         canvas.set_draw_color(Color::RGB(211, 250, 199));
         canvas.clear();
 
-        let environment = weak_environment.upgrade().unwrap();
-        let environment = environment.borrow_mut();
-
         canvas.set_draw_color(Color::RGB(73, 54, 87));
         for food in environment.food() {
             canvas
                 .fill_rect(Rect::from_center(
-                    (food.x() as i32, food.y() as i32),
+                    (food.position().x() as i32, food.position().y() as i32),
                     (food.energy() * 10.) as u32,
                     (food.energy() * 10.) as u32,
                 ))
@@ -72,7 +72,7 @@ fn render(
         canvas.set_draw_color(Color::RGB(255, 183, 195));
         for bug in environment.bugs() {
             let rotation = ComplexNumber::from_polar(1., Angle::from_radians(bug.rotation()));
-            let pos = ComplexNumber::from_cartesian(bug.x(), bug.y());
+            let pos = ComplexNumber::from_cartesian(bug.position().x(), bug.position().y());
 
             let size = 5.;
 
@@ -95,11 +95,24 @@ fn render(
                     Color::RGB(255, 183, 195),
                 )
                 .unwrap();
+
+            if Some(bug.id()) == state.selected_bug_id {
+                canvas.circle(
+                    bug.position().x() as i16,
+                    bug.position().y() as i16,
+                    bug::EAT_FOOD_MAX_PROXIMITY as i16,
+                    Color::RGB(255, 183, 195),
+                ).unwrap();
+            }
         }
 
         canvas.present();
     }
     slint::Image::from_rgba8(pixel_buffer)
+}
+
+struct State {
+    selected_bug_id: Option<usize>
 }
 
 pub fn main() -> Result<(), PlatformError> {
@@ -115,6 +128,11 @@ pub fn main() -> Result<(), PlatformError> {
         0. ..1.,
         256,
     )));
+
+    let state = Rc::new(RefCell::new(State { selected_bug_id: None }));
+
+    let weak_state = Rc::downgrade(&state);
+
     let weak_environment = Rc::downgrade(&environment);
 
     let timer = Timer::default();
@@ -128,11 +146,9 @@ pub fn main() -> Result<(), PlatformError> {
             let now = Instant::now();
             let dt = now - last_tick_instant;
             last_tick_instant = now;
-            weak_environment_copy0
-                .upgrade()
-                .unwrap()
-                .borrow_mut()
-                .proceed(dt, &mut rng);
+            let environment = weak_environment_copy0.upgrade().unwrap();
+            let mut environment = environment.try_borrow_mut().unwrap();
+            environment.proceed(dt, &mut rng);
         },
     );
 
@@ -140,14 +156,34 @@ pub fn main() -> Result<(), PlatformError> {
     let weak_main_window0 = main_window.as_weak();
     let weak_main_window1 = main_window.as_weak();
 
+    let weak_environment_copy1 = weak_environment.clone();
+    let weak_state_copy1 = weak_state.clone();
     main_window.on_pointer_event(move |k, x: f32, y: f32| {
-        let main_window = weak_main_window0.upgrade().unwrap();
-        let cw = main_window.get_requested_canvas_width();
-        let ch = main_window.get_requested_canvas_height();
-        println!("x: {:?}, {:?}, {:?}, {:?}, {:?}", k, x, y, cw, ch);
+        let point: Point<_> = (x as Float, y as Float).into();
+        let state = weak_state_copy1.upgrade().unwrap();
+        let mut state = state.try_borrow_mut().unwrap();
+
+        if k == 0 {
+            let main_window = weak_main_window0.upgrade().unwrap();
+            let environment = weak_environment_copy1.upgrade().unwrap();
+            let environment = environment.borrow();
+            let cw = main_window.get_requested_canvas_width();
+            let ch = main_window.get_requested_canvas_height();
+
+            for bug in environment.bugs() {
+                if (point - bug.position()).len() < 10. {
+                    println!("select: {:?}", bug.id());
+                    state.selected_bug_id = Some(bug.id());
+                    break;
+                }
+            }
+        }
+
+        // println!("x: {:?}, {:?}, {:?}, {:?}, {:?}", k, x, y, cw, ch);
     });
 
-    let weak_environment_copy1 = weak_environment.clone();
+    let weak_environment_copy2 = weak_environment.clone();
+    let weak_state_copy2 = weak_state.clone();
 
     let render_timer = Timer::default();
     render_timer.start(
@@ -155,12 +191,33 @@ pub fn main() -> Result<(), PlatformError> {
         std::time::Duration::from_millis(1000 / 30),
         move || {
             if let Some(window) = weak_main_window1.upgrade() {
+                let environment = weak_environment.upgrade().unwrap();
+                let environment = environment.try_borrow_mut().unwrap();
+                let state = weak_state_copy2.upgrade().unwrap();
+                let state = state.borrow();
+
                 let texture = render(
-                    &weak_environment_copy1,
+                    &environment,
+                    &state,
                     window.get_requested_canvas_width() as u32,
                     window.get_requested_canvas_height() as u32,
                 );
                 window.set_canvas(texture);
+
+                if let Some(bug) = state.selected_bug_id.and_then(|id| environment.find_bug_by_id(id)) {
+                    window.set_selected_bug_info(BugInfo {
+                        age: bug.age() as f32,
+                        baby_charge: bug.baby_charge() as f32,
+                        color: colorToRgbaColor(bug.color()).into(),
+                        energy_level: bug.energy_level() as f32,
+                        id: bug.id() as i32,
+                        rotation: Angle::from_radians(bug.rotation()).d.value as f32,
+                        size: bug.size() as f32,
+                        x: bug.position().x() as f32,
+                        y: bug.position().y() as f32,
+                    });
+                }
+
                 window.window().request_redraw();
             }
         },

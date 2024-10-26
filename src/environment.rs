@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use crate::{bug::Bug, utils::Float};
+use crate::{bug::Bug, math::Point, utils::Float};
 use chromosome::Chromosome;
 use rand::Rng;
 use rand::{distributions::uniform::SampleRange, RngCore};
@@ -14,8 +14,7 @@ static NEXT_FOOD_ID: AtomicUsize = AtomicUsize::new(0);
 
 pub(crate) struct Food {
     id: usize,
-    x: Float,
-    y: Float,
+    position: Point<Float>,
     energy: Float,
 }
 
@@ -24,12 +23,8 @@ impl Food {
         self.id
     }
 
-    pub(crate) fn x(&self) -> Float {
-        self.x
-    }
-
-    pub(crate) fn y(&self) -> Float {
-        self.y
+    pub(crate) fn position(&self) -> Point<Float> {
+        self.position
     }
 
     pub(crate) fn energy(&self) -> Float {
@@ -48,8 +43,7 @@ impl Food {
     ) -> Self {
         Food {
             id: NEXT_FOOD_ID.fetch_add(1, Ordering::SeqCst),
-            x: rng.gen_range(x_range),
-            y: rng.gen_range(y_range),
+            position: (rng.gen_range(x_range), rng.gen_range(y_range)).into(),
             energy: rng.gen_range(e_range),
         }
     }
@@ -104,8 +98,7 @@ impl Environment {
                 Chromosome {
                     genes: (0..256).map(|_| 1.).collect(),
                 },
-                rng.gen_range(x_range),
-                rng.gen_range(y_range),
+                (rng.gen_range(x_range), rng.gen_range(y_range)).into(),
                 rng.gen_range(0. ..PI),
             ))],
         }
@@ -130,6 +123,12 @@ impl Environment {
                 } => self.transfer_energy_from_food_to_bug(food_id, bug_id, delta_energy),
             }
         }
+    }
+
+    pub(crate) fn find_bug_by_id<'a>(&'a self, id: usize) -> Option<Ref<'a, Bug>> {
+        self.bugs
+            .iter()
+            .find_map(|bug| bug.try_borrow().ok().filter(|bug| bug.id() == id))
     }
 
     fn kill(&mut self, id: usize) {

@@ -1,10 +1,27 @@
 import { Slider, GroupBox, HorizontalBox, VerticalBox } from "std-widgets.slint";
+
+export struct BugInfo  {
+    id: int,
+    x: float,
+    y: float,
+    rotation: angle,
+    size: float,
+    energy_level: float,
+    age: percent,
+    color: color,
+    baby_charge: percent,
+}
+
+component Empty {}
+
 export component MainWindow inherits Window {
-    pure callback pointer-event(PointerEventKind, length, length);
+    pure callback pointer-event(int, length, length);
 
     in property <image> canvas <=> canvas.source;
     out property <int> requested-canvas-width: canvas.width / 1phx;
     out property <int> requested-canvas-height: canvas.height / 1phx;
+
+    in property <BugInfo> selected-bug-info;
 
     title: "The Bugs";
     preferred-width: 800px;
@@ -14,16 +31,63 @@ export component MainWindow inherits Window {
         padding: 0;
 
         VerticalBox {
+            width: 400px;
+
             Text {
                 font-size: 20px;
                 text: "The Bugs Environment";
                 horizontal-alignment: center;
             }
+            Text {
+                font-size: 20px;
+                text: "id: " + root.selected-bug-info.id;
+            }
+            Text {
+                font-size: 20px;
+                text: "position: { \{(root.selected-bug-info.x * 10).round() / 10}, \{(root.selected-bug-info.y * 10).round() / 10} }";
+            }
+            Text {
+                font-size: 20px;
+                text: "rotation: " + (root.selected-bug-info.rotation / 1deg).round() + "°";
+            }
+            Text {
+                font-size: 20px;
+                text: "size: " + root.selected-bug-info.size;
+            }
+            Text {
+                font-size: 20px;
+                text: "energy-level: " + (root.selected-bug-info.energy-level * 100).round() / 100;
+            }
+            Text {
+                font-size: 20px;
+                text: "age: " + (root.selected-bug-info.age / 1% * 100).round() / 100 + "%";
+            }
+            Text {
+                font-size: 20px;
+                color: root.selected-bug-info.color;
+                text: "color: {\{root.selected-bug-info.color.alpha}, \{root.selected-bug-info.color.red}, \{root.selected-bug-info.color.green}, \{root.selected-bug-info.color.blue}}";
+            }
+            Text {
+                font-size: 20px;
+                text: "baby-charge: " + (root.selected-bug-info.baby-charge / 1% * 100).round() / 100 + "%";
+            }
+
+            Empty {}
         }
 
         canvas := Image {
             touch := TouchArea {
-                pointer-event(event) => { root.pointer-event(event.kind, self.mouse-x, self.mouse-y); }
+                pointer-event(event) => {
+                    if(event.kind == PointerEventKind.up) {
+                        root.pointer-event(0, self.mouse-x, self.mouse-y);
+                    } else if(event.kind == PointerEventKind.down) {
+                        root.pointer-event(1, self.mouse-x, self.mouse-y);
+                    } else if(event.kind == PointerEventKind.move) {
+                        root.pointer-event(2, self.mouse-x, self.mouse-y);
+                    } else if(event.kind == PointerEventKind.cancel) {
+                        root.pointer-event(3, self.mouse-x, self.mouse-y);
+                    }
+                }
                 moved => {
                     if (self.enabled && self.pressed) {
                         // TODO

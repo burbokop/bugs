@@ -10,6 +10,8 @@ use complexible::complex_numbers::{Angle, ComplexNumber};
 use rand::Rng;
 use rand::RngCore;
 
+pub const EAT_FOOD_MAX_PROXIMITY: Float = 20.;
+
 use crate::{
     brain::{self, Brain},
     chromo_utils::ExtendedChromosome as _,
@@ -17,14 +19,15 @@ use crate::{
     utils::{Color, Float},
 };
 
+use crate::math::Point;
+
 static NEXT_BUG_ID: AtomicUsize = AtomicUsize::new(0);
 
 pub(crate) struct Bug {
     id: usize,
     chromosome: Chromosome<Float>,
     brain: Brain,
-    x: Float,
-    y: Float,
+    position: Point<Float>,
     rotation: Float,
     size: Float,
     energy_level: Float,
@@ -43,18 +46,33 @@ impl Bug {
         self.rotation
     }
 
-    pub(crate) fn x(&self) -> Float {
-        self.x
+    pub(crate) fn position(&self) -> Point<Float> {
+        self.position
     }
 
-    pub(crate) fn y(&self) -> Float {
-        self.y
+    pub(crate) fn size(&self) -> Float {
+        self.size
+    }
+
+    pub(crate) fn energy_level(&self) -> Float {
+        self.energy_level
+    }
+
+    pub(crate) fn baby_charge(&self) -> Float {
+        self.baby_charge
+    }
+
+    pub(crate) fn age(&self) -> Float {
+        (Instant::now() - self.birth_instant).div_duration_f64(self.max_age)
+    }
+
+    pub(crate) fn color(&self) -> &Color {
+        &self.color
     }
 
     pub(crate) fn give_birth(
         chromosome: Chromosome<Float>,
-        x: Float,
-        y: Float,
+        position: Point<Float>,
         rotation: Float,
     ) -> Self {
         let brain = Brain::new(&chromosome, 0..208);
@@ -71,8 +89,7 @@ impl Bug {
             id: NEXT_BUG_ID.fetch_add(1, Ordering::SeqCst),
             chromosome,
             brain,
-            x,
-            y,
+            position,
             rotation,
             size: 1.,
             energy_level: 1.,
@@ -84,29 +101,21 @@ impl Bug {
     }
 
     fn dst_to_bug(&self, other: &Bug) -> Float {
-        let dx = self.x - other.x;
-        let dy = self.y - other.y;
-        (dx * dx + dy * dy).sqrt()
+        (self.position - other.position).len()
     }
 
     fn dst_to_food(&self, other: &Food) -> Float {
-        let dx = self.x - other.x();
-        let dy = self.y - other.y();
-        (dx * dx + dy * dy).sqrt()
+        (self.position - other.position()).len()
     }
 
     /// return in redians
     fn direction_to_bug(&self, other: &Bug) -> Float {
-        let dx = self.x - other.x();
-        let dy = self.y - other.y();
-        dy.atan2(dx)
+        (self.position - other.position()).angle()
     }
 
     /// return in redians
     fn direction_to_food(&self, other: &Food) -> Float {
-        let dx = self.x - other.x();
-        let dy = self.y - other.y();
-        dy.atan2(dx)
+        (self.position - other.position()).angle()
     }
 
     fn find_nearest_bug<'a>(&self, env: &'a Environment) -> Option<Ref<'a, Bug>> {
@@ -125,8 +134,7 @@ impl Bug {
     fn reproduce_asexually<R: RngCore>(&self, rng: &mut R) -> Bug {
         Bug::give_birth(
             self.chromosome.mutated_ext(|_| 1., 0.1, rng),
-            self.x,
-            self.y,
+            self.position,
             rng.gen_range(0. ..(PI * 2.)),
         )
     }
@@ -166,7 +174,7 @@ impl Bug {
             0.
         };
 
-        let age = (Instant::now() - self.birth_instant).div_duration_f64(self.max_age);
+        let age = self.age();
 
         let nearest_bug = self.find_nearest_bug(env);
         let proximity_to_bug = if let Some(nearest_bug) = &nearest_bug {
@@ -215,11 +223,10 @@ impl Bug {
 
         {
             let delta_distance = brain_output.velocity * dt.as_secs_f64();
-            let new_pos = ComplexNumber::from_cartesian(self.x, self.y).add(
+            let new_pos = ComplexNumber::from_cartesian(self.position.x(), self.position.y()).add(
                 &ComplexNumber::from_polar(delta_distance, Angle::from_radians(self.rotation)),
             );
-            self.x = new_pos.real();
-            self.y = new_pos.imag();
+            self.position = (new_pos.real(), new_pos.imag()).into();
             self.energy_level -= delta_distance * 0.001;
         }
 
@@ -232,7 +239,7 @@ impl Bug {
         let mut requests: Vec<EnvironmentRequest> = Default::default();
 
         if let Some(nearest_food) = nearest_food {
-            if proximity_to_food < 20. {
+            if proximity_to_food < EAT_FOOD_MAX_PROXIMITY {
                 let eat_rate = 0.1;
                 requests.push(EnvironmentRequest::TransferEnergyFromFoodToBug {
                     food_id: nearest_food.id(),
