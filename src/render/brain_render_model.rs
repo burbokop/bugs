@@ -1,16 +1,13 @@
-use std::cmp::max_by;
-
 use crate::{brain::Brain, bug::BrainLog, utils::Float};
-use complexible::complex_numbers::{Angle, ComplexNumber};
-use font_loader::system_fonts::{self, FontProperty};
+use font_loader::system_fonts;
 use sdl2::{
     gfx::primitives::DrawRenderer as _,
     pixels::Color,
     rect::{Point, Rect},
-    render::{Canvas, RenderTarget, TextureQuery},
+    render::{Canvas, TextureQuery},
     rwops::RWops,
     surface::Surface,
-    ttf::{self, Font},
+    ttf::Font,
 };
 use simple_neural_net::PerceptronLayer;
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
@@ -32,19 +29,35 @@ fn draw_layer_activations<const SIZE: usize>(
     font: &Font,
     layer: [Float; SIZE],
     max_width: usize,
+    selected_node: Option<(usize, usize)>,
+    layer_index: isize,
     x: i32,
 ) {
     for (i, a) in layer.iter().enumerate() {
         let off = (max_width - layer.len()) / 2;
         let point = (x, (40 + 40 * (off + i)) as i32);
-        canvas
-            .circle(point.0 as i16, point.1 as i16, 10, Color::RGB(47, 72, 88))
-            .unwrap();
+
+        let selected = selected_node
+            .map(|s| s.0 as isize == layer_index && s.1 == i)
+            .unwrap_or(true);
+
+        let node_color = Color::RGB(165, 136, 171);
+        let text_color = Color::RGB(47, 72, 88);
+
+        if selected {
+            canvas
+                .filled_circle(point.0 as i16, point.1 as i16, 10, node_color)
+                .unwrap();
+        } else {
+            canvas
+                .circle(point.0 as i16, point.1 as i16, 10, node_color)
+                .unwrap();
+        }
 
         let texture_creator = canvas.texture_creator();
         let surface = font
             .render(&format!("{:.2}", a))
-            .blended(Color::RGBA(255, 0, 0, 255))
+            .blended(text_color)
             .map_err(|e| e.to_string())
             .unwrap();
         let texture = texture_creator
@@ -64,15 +77,34 @@ fn draw_connections<const INPUT_SIZE: usize, const OUTPUT_SIZE: usize>(
     font: &Font,
     layer: &PerceptronLayer<Float, INPUT_SIZE, OUTPUT_SIZE>,
     max_width: usize,
+    selected_node: Option<(usize, usize)>,
+    layer_index: usize,
     x0: i32,
     x1: i32,
 ) {
+    let max_weight = layer
+        .perceptrons()
+        .iter()
+        .map(|p| p.weights().iter())
+        .flatten()
+        .cloned()
+        .reduce(Float::max)
+        .unwrap();
 
-    let max_weight = layer.perceptrons().iter().map(|p|p.weights().iter())
-    .flatten().cloned().reduce(Float::max).unwrap();
+    let node_color = Color::RGB(165, 136, 171);
+    let text_color = Color::RGB(47, 72, 88);
+    let bias_text_color = Color::RGB(249, 248, 113);
 
-    for i in 0..INPUT_SIZE {
-        for j in 0..OUTPUT_SIZE {
+    for j in 0..OUTPUT_SIZE {
+        let selected = selected_node
+            .map(|s| s.0 == layer_index && s.1 == j)
+            .unwrap_or(true);
+
+        if !selected {
+            continue;
+        }
+
+        for i in 0..INPUT_SIZE {
             let w = layer.perceptrons()[j].weights()[i];
 
             let off_i = (max_width - INPUT_SIZE) / 2;
@@ -86,29 +118,55 @@ fn draw_connections<const INPUT_SIZE: usize, const OUTPUT_SIZE: usize>(
                     point0.1 as i16,
                     point1.0 as i16,
                     point1.1 as i16,
-                    Color::RGBA(47, 72, 88, (w / max_weight * 255.) as u8),
+                    Color::RGBA(
+                        node_color.r,
+                        node_color.g,
+                        node_color.b,
+                        (w / max_weight * 255.) as u8,
+                    ),
                 )
                 .unwrap();
 
+            let center = (Point::from(point0) + Point::from(point1)) / 2;
 
-                let center = (Point::from(point0) + Point::from(point1)) / 2;
+            let texture_creator = canvas.texture_creator();
+            let surface = font
+                .render(&format!("{:.2}", w))
+                .blended(text_color)
+                .map_err(|e| e.to_string())
+                .unwrap();
+            let texture = texture_creator
+                .create_texture_from_surface(&surface)
+                .map_err(|e| e.to_string())
+                .unwrap();
 
-                let texture_creator = canvas.texture_creator();
-                let surface = font
-                    .render(&format!("{:.2}", w))
-                    .blended(Color::RGBA(255, 0, 0, 255))
-                    .map_err(|e| e.to_string())
-                    .unwrap();
-                let texture = texture_creator
-                    .create_texture_from_surface(&surface)
-                    .map_err(|e| e.to_string())
-                    .unwrap();
-
-                let TextureQuery { width, height, .. } = texture.query();
-                canvas
-                    .copy(&texture, None, Rect::from_center(center, width, height))
-                    .unwrap();
+            let TextureQuery { width, height, .. } = texture.query();
+            canvas
+                .copy(&texture, None, Rect::from_center(center, width, height))
+                .unwrap();
         }
+
+        let off_i = (max_width - INPUT_SIZE) / 2;
+        let off_j = (max_width - OUTPUT_SIZE) / 2;
+        let point0 = (x0, (40 + 40 * (off_i + INPUT_SIZE)) as i32);
+        let point1 = (x1, (40 + 40 * (off_j + j)) as i32);
+        let center = (Point::from(point0) + Point::from(point1)) / 2;
+
+        let texture_creator = canvas.texture_creator();
+        let surface = font
+            .render(&format!("{:.2}", layer.perceptrons()[j].bias()))
+            .blended(bias_text_color)
+            .map_err(|e| e.to_string())
+            .unwrap();
+        let texture = texture_creator
+            .create_texture_from_surface(&surface)
+            .map_err(|e| e.to_string())
+            .unwrap();
+
+        let TextureQuery { width, height, .. } = texture.query();
+        canvas
+            .copy(&texture, None, Rect::from_center(center, width, height))
+            .unwrap();
     }
 }
 
@@ -117,6 +175,7 @@ impl BrainRenderModel {
         &mut self,
         brain: &Brain,
         log: &BrainLog,
+        selected_node: Option<(usize, usize)>,
         requested_canvas_width: u32,
         requested_canvas_height: u32,
     ) -> Image {
@@ -165,17 +224,48 @@ impl BrainRenderModel {
 
             let max_width = a0.len().max(a1.len()).max(a2.len());
 
-            draw_layer_activations(&mut canvas, &font, a0, max_width, 40);
-            draw_connections::<16, 8>(&mut canvas, &font, &brain.layers().0, max_width, 40, 40 + 100);
-            draw_layer_activations(&mut canvas, &font, a1, max_width, 40 + 100);
+            draw_connections::<16, 8>(
+                &mut canvas,
+                &font,
+                &brain.layers().0,
+                max_width,
+                selected_node,
+                0,
+                40,
+                40 + 100,
+            );
             draw_connections::<8, 8>(
-                &mut canvas,&font,
+                &mut canvas,
+                &font,
                 &brain.layers().1,
                 max_width,
+                selected_node,
+                1,
                 40 + 100,
                 40 + 200,
             );
-            draw_layer_activations(&mut canvas, &font, a2, max_width, 40 + 200);
+
+            draw_layer_activations(&mut canvas, &font, a0, max_width, selected_node, -1, 40);
+
+            draw_layer_activations(
+                &mut canvas,
+                &font,
+                a1,
+                max_width,
+                selected_node,
+                0,
+                40 + 100,
+            );
+
+            draw_layer_activations(
+                &mut canvas,
+                &font,
+                a2,
+                max_width,
+                selected_node,
+                1,
+                40 + 200,
+            );
 
             canvas.present();
         }

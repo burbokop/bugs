@@ -30,6 +30,7 @@ struct State {
     selected_bug_id: Option<usize>,
     time_speed: Float,
     pause: bool,
+    selected_node: Option<(usize, usize)>,
 }
 
 pub fn main() -> Result<(), PlatformError> {
@@ -53,6 +54,7 @@ pub fn main() -> Result<(), PlatformError> {
         brain_render_model: Default::default(),
         time_speed: 1.,
         pause: true,
+        selected_node: None,
     }));
 
     let timer = Timer::default();
@@ -156,11 +158,31 @@ pub fn main() -> Result<(), PlatformError> {
         main_window.on_key_release_event(move |text| {
             let state = weak_state.upgrade().unwrap();
             let mut state = state.try_borrow_mut().unwrap();
+            println!("xxx: {}", text);
             if let Ok(lvl) = text.parse::<u32>() {
                 state.time_speed = (2_u32).pow(lvl) as f64;
                 true
             } else if text == " " {
                 state.pause = !state.pause;
+                true
+            } else if text == "w" {
+                let i = &mut state.selected_node.get_or_insert((0, 0)).1;
+                *i = (*i - 1) % 8;
+                true
+            } else if text == "a" {
+                let i = &mut state.selected_node.get_or_insert((0, 0)).0;
+                *i = (*i - 1) % 2;
+                true
+            } else if text == "s" {
+                let i = &mut state.selected_node.get_or_insert((0, 0)).1;
+                *i = (*i + 1) % 8;
+                true
+            } else if text == "d" {
+                let i = &mut state.selected_node.get_or_insert((0, 0)).0;
+                *i = (*i + 1) % 2;
+                true
+            } else if text == "f" {
+                state.selected_node = None;
                 true
             } else {
                 false
@@ -231,6 +253,7 @@ pub fn main() -> Result<(), PlatformError> {
                             window.set_brain_canvas(brain_render_model.render(
                                 bug.brain(),
                                 brain_log,
+                                state.selected_node,
                                 window.get_requested_brain_canvas_width() as u32,
                                 window.get_requested_brain_canvas_height() as u32,
                             ));
