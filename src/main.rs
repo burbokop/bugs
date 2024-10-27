@@ -4,7 +4,7 @@
 use complexible::complex_numbers::Angle;
 use environment::Environment;
 use math::Point;
-use render::{Camera, RenderModel};
+use render::{BrainRenderModel, Camera, EnvironmentRenderModel};
 use slint::{ComponentHandle, PlatformError, Timer, TimerMode};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -25,10 +25,11 @@ slint::slint! {
 struct State {
     environment: Environment,
     camera: Camera,
-    render_model: RefCell<RenderModel>,
+    environment_render_model: RefCell<EnvironmentRenderModel>,
+    brain_render_model: RefCell<BrainRenderModel>,
     selected_bug_id: Option<usize>,
     time_speed: Float,
-    pause: bool
+    pause: bool,
 }
 
 pub fn main() -> Result<(), PlatformError> {
@@ -44,11 +45,12 @@ pub fn main() -> Result<(), PlatformError> {
             0. ..(height as Float),
             0. ..1.,
             10240,
-            (500., 500.).into()
+            (500., 500.).into(),
         ),
         selected_bug_id: None,
         camera: Default::default(),
-        render_model: Default::default(),
+        environment_render_model: Default::default(),
+        brain_render_model: Default::default(),
         time_speed: 1.,
         pause: true,
     }));
@@ -83,8 +85,8 @@ pub fn main() -> Result<(), PlatformError> {
             let state = weak_state.upgrade().unwrap();
             let mut state = state.try_borrow_mut().unwrap();
 
-            let point: Point<_> =
-                &(!&state.camera.transformation()).unwrap() * &Point::from((x as Float, y as Float));
+            let point: Point<_> = &(!&state.camera.transformation()).unwrap()
+                * &Point::from((x as Float, y as Float));
 
             if k == 0 {
                 let selected_bug_id = state.environment.bugs().find_map(|bug| {
@@ -130,14 +132,14 @@ pub fn main() -> Result<(), PlatformError> {
                 );
             } else if shift {
                 // scroll horizontally
-                state
-                    .camera
-                    .add_translation((angle_delta_to_translation_delta(delta_y as Float), 0.).into());
+                state.camera.add_translation(
+                    (angle_delta_to_translation_delta(delta_y as Float), 0.).into(),
+                );
             } else {
                 // scroll vertically
-                state
-                    .camera
-                    .add_translation((0., angle_delta_to_translation_delta(delta_y as Float)).into());
+                state.camera.add_translation(
+                    (0., angle_delta_to_translation_delta(delta_y as Float)).into(),
+                );
             }
 
             true
@@ -146,14 +148,12 @@ pub fn main() -> Result<(), PlatformError> {
 
     {
         let _weak_state = Rc::downgrade(&state);
-        main_window.on_key_press_event(move|_text| {
-            false
-        });
+        main_window.on_key_press_event(move |_text| false);
     }
 
     {
         let weak_state = Rc::downgrade(&state);
-        main_window.on_key_release_event(move|text| {
+        main_window.on_key_release_event(move |text| {
             let state = weak_state.upgrade().unwrap();
             let mut state = state.try_borrow_mut().unwrap();
             if let Ok(lvl) = text.parse::<u32>() {
@@ -162,12 +162,12 @@ pub fn main() -> Result<(), PlatformError> {
             } else if text == " " {
                 state.pause = !state.pause;
                 true
-            } else {false}
+            } else {
+                false
+            }
         });
     }
     main_window.invoke_init_focus();
-
-
 
     let mut prev_render_instant = Instant::now();
 
@@ -188,16 +188,16 @@ pub fn main() -> Result<(), PlatformError> {
                     let state = weak_state.upgrade().unwrap();
                     let state = state.borrow();
 
-                    let mut render_model = state.render_model.borrow_mut();
+                    let mut environment_render_model = state.environment_render_model.borrow_mut();
 
-                    let texture = render_model.render(
+                    let texture = environment_render_model.render(
                         &state.environment,
                         &state.camera,
                         &state.selected_bug_id,
-                        window.get_requested_canvas_width() as u32,
-                        window.get_requested_canvas_height() as u32,
+                        window.get_requested_env_canvas_width() as u32,
+                        window.get_requested_env_canvas_height() as u32,
                     );
-                    window.set_canvas(texture);
+                    window.set_env_canvas(texture);
                     window.set_fps(1. / dt.as_secs_f32());
                     window.set_time_speed(state.time_speed as f32);
                     window.set_pause(state.pause);
@@ -207,7 +207,13 @@ pub fn main() -> Result<(), PlatformError> {
                         .and_then(|id| state.environment.find_bug_by_id(id))
                     {
                         window.set_selected_bug_info(BugInfo {
-                            genes: bug.chromosome().genes.iter().map(|x| *x as f32).collect::<Vec<_>>()[..].into(),
+                            genes: bug
+                                .chromosome()
+                                .genes
+                                .iter()
+                                .map(|x| *x as f32)
+                                .collect::<Vec<_>>()[..]
+                                .into(),
                             age: bug.age(state.environment.now().clone()) as f32,
                             baby_charge: bug.baby_charge() as f32,
                             color: color_to_slint_rgba_color(bug.color()).into(),
@@ -218,6 +224,44 @@ pub fn main() -> Result<(), PlatformError> {
                             x: *bug.position().x() as f32,
                             y: *bug.position().y() as f32,
                         });
+
+                        if let Some(brain_log) = bug.last_brain_log() {
+                            let mut brain_render_model = state.brain_render_model.borrow_mut();
+
+                            window.set_brain_canvas(brain_render_model.render(
+                                bug.brain(),
+                                brain_log,
+                                window.get_requested_brain_canvas_width() as u32,
+                                window.get_requested_brain_canvas_height() as u32,
+                            ));
+
+                            window.set_selected_bug_last_brain_log(BugBrainLog {
+                                input: BugBrainInput {
+                                    age: brain_log.input.age as f32,
+                                    baby_charge: brain_log.input.baby_charge as f32,
+                                    color_of_nearest_bug: color_to_slint_rgba_color(
+                                        &brain_log.input.color_of_nearest_bug,
+                                    )
+                                    .into(),
+                                    direction_to_nearest_bug: brain_log
+                                        .input
+                                        .direction_to_nearest_bug
+                                        as f32,
+                                    direction_to_nearest_food: brain_log
+                                        .input
+                                        .direction_to_nearest_food
+                                        as f32,
+                                    energy_level: brain_log.input.energy_level as f32,
+                                    proximity_to_bug: brain_log.input.proximity_to_bug as f32,
+                                    proximity_to_food: brain_log.input.proximity_to_food as f32,
+                                },
+                                output: BugBrainOutput {
+                                    baby_charging_rate: brain_log.output.baby_charging_rate as f32,
+                                    rotation_velocity: brain_log.output.rotation_velocity as f32,
+                                    velocity: brain_log.output.velocity as f32,
+                                },
+                            });
+                        }
                     }
 
                     window.window().request_redraw();

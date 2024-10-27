@@ -1,5 +1,7 @@
+mod brain_render_model;
 mod camera;
-mod render_model;
+mod environment_render_model;
 
+pub use brain_render_model::*;
 pub use camera::*;
-pub use render_model::*;
+pub use environment_render_model::*;

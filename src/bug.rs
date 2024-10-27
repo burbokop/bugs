@@ -13,7 +13,7 @@ use rand::RngCore;
 pub const EAT_FOOD_MAX_PROXIMITY: Float = 20.;
 
 use crate::{
-    brain::{self, Brain},
+    brain::{self, Brain, VerboseOutput},
     chromo_utils::ExtendedChromosome as _,
     environment::{Environment, EnvironmentRequest, Food},
     utils::{Color, Float},
@@ -23,10 +23,17 @@ use crate::math::Point;
 
 static NEXT_BUG_ID: AtomicUsize = AtomicUsize::new(0);
 
+pub(crate) struct BrainLog {
+    pub input: brain::Input,
+    pub output: brain::Output,
+    pub activations: ([Float; 16], [Float; 8], [Float; 8]),
+}
+
 pub(crate) struct Bug {
     id: usize,
     chromosome: Chromosome<Float>,
     brain: Brain,
+    last_brain_log: Option<BrainLog>,
     position: Point<Float>,
     rotation: Float,
     size: Float,
@@ -44,6 +51,14 @@ impl Bug {
 
     pub(crate) fn chromosome(&self) -> &Chromosome<Float> {
         &self.chromosome
+    }
+
+    pub(crate) fn brain(&self) -> &Brain {
+        &self.brain
+    }
+
+    pub(crate) fn last_brain_log(&self) -> &Option<BrainLog> {
+        &self.last_brain_log
     }
 
     pub(crate) fn rotation(&self) -> Float {
@@ -93,6 +108,7 @@ impl Bug {
             id: NEXT_BUG_ID.fetch_add(1, Ordering::SeqCst),
             chromosome,
             brain,
+            last_brain_log: None,
             position,
             rotation,
             size: 1.,
@@ -137,7 +153,7 @@ impl Bug {
 
     fn reproduce_asexually<R: RngCore>(&self, rng: &mut R) -> Bug {
         Bug::give_birth(
-            self.chromosome.mutated_ext(|_| 0.2, 0.1, rng),
+            self.chromosome.mutated_ext(|_| 0.01..1., 0.01, rng),
             self.position,
             rng.gen_range(0. ..(PI * 2.)),
         )
@@ -215,9 +231,16 @@ impl Bug {
             baby_charge: self.baby_charge,
         };
 
-        let brain_output = self.brain.proceed(brain_input.clone());
+        let VerboseOutput {
+            output: brain_output,
+            activations,
+        } = self.brain.proceed_verbosely(brain_input.clone());
 
-        // println!("{:#?}", (self.id, &brain_input, &brain_output));
+        self.last_brain_log = Some(BrainLog {
+            input: brain_input.clone(),
+            output: brain_output.clone(),
+            activations,
+        });
 
         {
             let delta_rotation = brain_output.rotation_velocity * 0.01 * dt.as_secs_f64();

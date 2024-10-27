@@ -1,5 +1,30 @@
 import { Slider, GroupBox, HorizontalBox, VerticalBox, GridBox } from "std-widgets.slint";
 
+export struct BugBrainInput {
+    energy_level: float,
+    proximity_to_food: float,
+    direction_to_nearest_food: float,
+    age: float,
+    proximity_to_bug: float,
+    direction_to_nearest_bug: float,
+    color_of_nearest_bug: color,
+    baby_charge: float,
+}
+
+export struct BugBrainOutput {
+    /// in pixels per second
+    velocity: float,
+    /// radians per second
+    rotation-velocity: float,
+    /// energy per second
+    baby-charging-rate: float,
+}
+
+export struct BugBrainLog {
+    input: BugBrainInput,
+    output: BugBrainOutput,
+}
+
 export struct BugInfo  {
     id: int,
     genes: [float],
@@ -7,44 +32,53 @@ export struct BugInfo  {
     y: float,
     rotation: angle,
     size: float,
-    energy_level: float,
+    energy-level: float,
     age: percent,
     color: color,
-    baby_charge: percent,
+    baby-charge: percent,
 }
 
 component Empty {}
 
-
+global Utils {
+    pure public function color-to-string(c: color) -> string {
+        return "(" + c.alpha + ", " + c.red + ", " + c.green + ", " + c.blue + ")";
+    }
+}
 
 export component MainWindow inherits Window {
+    in property <image> env-canvas <=> env-canvas.source;
+    in property <image> brain-canvas <=> brain-canvas.source;
+
+    in property <float> fps;
+    in property <float> time-speed;
+    in property <bool> pause;
+    in property <BugInfo> selected-bug-info;
+    in property <BugBrainLog> selected-bug-last-brain-log;
+
+    out property <int> requested-env-canvas-width: env-canvas.width / 1phx;
+    out property <int> requested-env-canvas-height: env-canvas.height / 1phx;
+
+    out property <int> requested-brain-canvas-width: brain-canvas.width / 1phx;
+    out property <int> requested-brain-canvas-height: brain-canvas.height / 1phx;
+
     pure callback pointer-event(int, length, length);
     pure callback scroll-event(length, length, length, length, bool, bool) -> bool;
     pure callback key-press-event(string) -> bool;
     pure callback key-release-event(string) -> bool;
-
-    in property <image> canvas <=> canvas.source;
-    in property <float> fps;
-    in property <float> time-speed;
-    in property <bool> pause;
-
-    out property <int> requested-canvas-width: canvas.width / 1phx;
-    out property <int> requested-canvas-height: canvas.height / 1phx;
-
-    in property <BugInfo> selected-bug-info;
 
     public function init_focus() {
         focus-scope.focus()
     }
 
     title: "The Bugs";
-    preferred-width: 800px;
+    preferred-width: 1000px;
     preferred-height: 600px;
 
     HorizontalBox {
         padding: 0;
 
-        VerticalBox {
+        VerticalLayout {
             width: 500px;
 
             Text {
@@ -100,7 +134,7 @@ export component MainWindow inherits Window {
             Text {
                 font-size: 14px;
                 color: root.selected-bug-info.color;
-                text: "color: {\{root.selected-bug-info.color.alpha}, \{root.selected-bug-info.color.red}, \{root.selected-bug-info.color.green}, \{root.selected-bug-info.color.blue}}";
+                text: "color: \{Utils.color-to-string(root.selected-bug-info.color)}";
             }
             Text {
                 font-size: 14px;
@@ -109,7 +143,67 @@ export component MainWindow inherits Window {
 
             Text {
                 font-size: 14px;
-                text: "genes:";
+                text: "Brain input:";
+            }
+
+            Text {
+                font-size: 14px;
+                text: "         energy_level: " + root.selected-bug-last-brain-log.input.energy_level;
+            }
+
+            Text {
+                font-size: 14px;
+                text: "         proximity_to_food: " + root.selected-bug-last-brain-log.input.proximity_to_food;
+            }
+
+            Text {
+                font-size: 14px;
+                text: "         direction_to_nearest_food: " + root.selected-bug-last-brain-log.input.direction_to_nearest_food;
+            }
+
+            Text {
+                font-size: 14px;
+                text: "         age: " + root.selected-bug-last-brain-log.input.age;
+            }
+
+            Text {
+                font-size: 14px;
+                text: "         proximity_to_bug: " + root.selected-bug-last-brain-log.input.proximity_to_bug;
+            }
+
+            Text {
+                font-size: 14px;
+                text: "         direction_to_nearest_bug: " + root.selected-bug-last-brain-log.input.direction_to_nearest_bug;
+            }
+
+            Text {
+                font-size: 14px;
+                text: "         color_of_nearest_bug: \{Utils.color-to-string(root.selected-bug-last-brain-log.input.color_of_nearest_bug)}";
+            }
+
+            Text {
+                font-size: 14px;
+                text: "         baby_charge: \{root.selected-bug-last-brain-log.input.baby_charge}";
+            }
+
+            Text {
+                font-size: 14px;
+                text: "Brain output:";
+            }
+
+            Text {
+                font-size: 14px;
+                text: "         velocity: \{root.selected-bug-last-brain-log.output.velocity}";
+            }
+
+            Text {
+                font-size: 14px;
+                text: "         rotation_velocity: \{root.selected-bug-last-brain-log.output.rotation-velocity}";
+            }
+
+            Text {
+                font-size: 14px;
+                text: "         baby_charging_rate: \{root.selected-bug-last-brain-log.output.baby-charging-rate}";
             }
 
             genes-area := Rectangle {
@@ -122,7 +216,7 @@ export component MainWindow inherits Window {
 
                     Text {
                         font-size: 10px;
-                        text: gene;
+                        text: (gene * 10).round() / 10;
                     }
 
                     background: index < 208
@@ -144,7 +238,7 @@ export component MainWindow inherits Window {
             }
         }
 
-        canvas := Image {
+        env-canvas := Image {
             touch := TouchArea {
                 pointer-event(event) => {
                     if(event.kind == PointerEventKind.up) {
@@ -176,6 +270,10 @@ export component MainWindow inherits Window {
                 y: 0;
                 text: "fps: \{(root.fps * 10).round() / 10}";
             }
+        }
+
+        brain-canvas := Image {
+            width: 300px;
         }
     }
 

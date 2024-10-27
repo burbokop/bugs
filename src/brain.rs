@@ -1,7 +1,7 @@
 use crate::utils::{Color, Float};
 use chromosome::Chromosome;
 use core::range::Range;
-use simple_neural_net::{normalizers, Arr, Layer as _};
+use simple_neural_net::{normalizers, Arr, Layer as _, PerceptronLayer};
 
 simple_neural_net::compose_layers!(Net, 16, 8, 8);
 
@@ -29,6 +29,11 @@ pub(crate) struct Output {
     pub(crate) rotation_velocity: Float,
     /// energy per second
     pub(crate) baby_charging_rate: Float,
+}
+
+pub(crate) struct VerboseOutput {
+    pub output: Output,
+    pub activations: ([Float; 16], [Float; 8], [Float; 8]),
 }
 
 impl From<Input> for [Float; 16] {
@@ -65,6 +70,15 @@ impl From<Arr<Float, 8>> for Output {
 }
 
 impl Brain {
+    pub(crate) fn layers(
+        &self,
+    ) -> (
+        &PerceptronLayer<Float, 16, 8>,
+        &PerceptronLayer<Float, 8, 8>,
+    ) {
+        (&self.net.l0, &self.net.l1)
+    }
+
     pub(crate) fn new<R: Into<Range<usize>>>(chromosome: &Chromosome<Float>, range: R) -> Self {
         let range = range.into();
         let genes = &chromosome.genes[range.start..range.end];
@@ -106,5 +120,14 @@ impl Brain {
 
     pub(crate) fn proceed(&self, input: Input) -> Output {
         self.net.proceed(&input.into(), normalizers::sigmoid).into()
+    }
+
+    pub(crate) fn proceed_verbosely(&self, input: Input) -> VerboseOutput {
+        let i = input.into();
+        let (r0, r1) = self.net.proceed_verbosely(&i, normalizers::sigmoid);
+        VerboseOutput {
+            output: r1.clone().into(),
+            activations: (i, *r0, *r1),
+        }
     }
 }

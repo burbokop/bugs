@@ -9,11 +9,11 @@ use complexible::complex_numbers::{Angle, ComplexNumber};
 use sdl2::{gfx::primitives::DrawRenderer as _, pixels::Color, rect::Rect, surface::Surface};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 
-pub struct RenderModel {
+pub struct EnvironmentRenderModel {
     buffer: SharedPixelBuffer<Rgba8Pixel>,
 }
 
-impl Default for RenderModel {
+impl Default for EnvironmentRenderModel {
     fn default() -> Self {
         Self {
             buffer: SharedPixelBuffer::new(0, 0),
@@ -21,7 +21,7 @@ impl Default for RenderModel {
     }
 }
 
-impl RenderModel {
+impl EnvironmentRenderModel {
     pub fn render(
         &mut self,
         environment: &Environment,
