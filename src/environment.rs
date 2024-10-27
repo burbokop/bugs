@@ -2,7 +2,7 @@ use std::{
     cell::{Ref, RefCell},
     f64::consts::PI,
     sync::atomic::{AtomicUsize, Ordering},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::{bug::Bug, math::Point, utils::Float};
@@ -76,6 +76,7 @@ pub(crate) enum EnvironmentRequest {
 pub(crate) struct Environment {
     food: Vec<Food>,
     bugs: Vec<RefCell<Bug>>,
+    now: Instant,
 }
 
 impl Environment {
@@ -85,6 +86,7 @@ impl Environment {
         y_range: RR,
         food_e_range: RR,
         food_count: usize,
+        bug_position: Point<Float>,
     ) -> Self {
         Self {
             food: Food::generate_vec(
@@ -98,15 +100,19 @@ impl Environment {
                 Chromosome {
                     genes: (0..256).map(|_| 1.).collect(),
                 },
-                (rng.gen_range(x_range), rng.gen_range(y_range)).into(),
+                bug_position,
                 rng.gen_range(0. ..PI),
             ))],
+            now: Instant::now(),
         }
     }
-}
 
-impl Environment {
+    pub(crate) fn now(&self) -> &Instant {
+        &self.now
+    }
+
     pub(crate) fn proceed<R: RngCore>(&mut self, dt: Duration, rng: &mut R) {
+        self.now += dt;
         let mut requests: Vec<EnvironmentRequest> = Default::default();
         for b in &self.bugs {
             requests.append(&mut b.borrow_mut().proceed(&self, dt, rng));

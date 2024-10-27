@@ -62,8 +62,8 @@ impl Bug {
         self.baby_charge
     }
 
-    pub(crate) fn age(&self) -> Float {
-        (Instant::now() - self.birth_instant).div_duration_f64(self.max_age)
+    pub(crate) fn age(&self, now: Instant) -> Float {
+        (now - self.birth_instant).div_duration_f64(self.max_age)
     }
 
     pub(crate) fn color(&self) -> &Color {
@@ -174,7 +174,7 @@ impl Bug {
             0.
         };
 
-        let age = self.age();
+        let age = self.age(env.now().clone());
 
         let nearest_bug = self.find_nearest_bug(env);
         let proximity_to_bug = if let Some(nearest_bug) = &nearest_bug {
