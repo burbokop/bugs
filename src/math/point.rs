@@ -1,6 +1,6 @@
 use std::ops::Sub;
 
-use super::Vector;
+use super::{Vector, Zero};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Point<T> {
@@ -25,10 +25,20 @@ impl<T: Sub> Sub for Point<T> {
 }
 
 impl<T> Point<T> {
-    pub fn x(self) -> T {
-        self.x
+    pub fn origin() -> Self
+    where
+        T: Zero,
+    {
+        Self {
+            x: T::zero(),
+            y: T::zero(),
+        }
     }
-    pub fn y(self) -> T {
-        self.y
+
+    pub fn x(&self) -> &T {
+        &self.x
+    }
+    pub fn y(&self) -> &T {
+        &self.y
     }
 }

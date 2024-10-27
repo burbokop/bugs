@@ -223,9 +223,10 @@ impl Bug {
 
         {
             let delta_distance = brain_output.velocity * dt.as_secs_f64();
-            let new_pos = ComplexNumber::from_cartesian(self.position.x(), self.position.y()).add(
-                &ComplexNumber::from_polar(delta_distance, Angle::from_radians(self.rotation)),
-            );
+            let new_pos =
+                ComplexNumber::from_cartesian(*self.position.x(), *self.position.y()).add(
+                    &ComplexNumber::from_polar(delta_distance, Angle::from_radians(self.rotation)),
+                );
             self.position = (new_pos.real(), new_pos.imag()).into();
             self.energy_level -= delta_distance * 0.001;
         }

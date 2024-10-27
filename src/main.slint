@@ -14,10 +14,15 @@ export struct BugInfo  {
 
 component Empty {}
 
+
+
 export component MainWindow inherits Window {
     pure callback pointer-event(int, length, length);
+    pure callback scroll-event(length, length, length, length, bool, bool) -> bool;
 
     in property <image> canvas <=> canvas.source;
+    in property <float> fps;
+
     out property <int> requested-canvas-width: canvas.width / 1phx;
     out property <int> requested-canvas-height: canvas.height / 1phx;
 
@@ -88,12 +93,23 @@ export component MainWindow inherits Window {
                         root.pointer-event(3, self.mouse-x, self.mouse-y);
                     }
                 }
+
+                scroll-event(event) => {
+                    root.scroll-event(self.mouse-x, self.mouse-y, event.delta-x, event.delta-y, event.modifiers.shift, event.modifiers.control) ? accept : reject
+                }
+
                 moved => {
                     if (self.enabled && self.pressed) {
                         // TODO
                     }
                 }
                 mouse-cursor: self.pressed ? MouseCursor.grabbing : MouseCursor.grab;
+            }
+
+            Text {
+                x: 0;
+                y: 0;
+                text: "fps: \{(root.fps * 10).round() / 10}";
             }
         }
     }

@@ -17,6 +17,20 @@ impl<T> From<(T, T)> for Vector<T> {
     }
 }
 
+impl<T> Add for Vector<T>
+where
+    T: Add,
+{
+    type Output = Vector<<T as Add>::Output>;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self::Output {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+        }
+    }
+}
+
 impl<T> Vector<T>
 where
     T: Sqr,
@@ -34,5 +48,14 @@ where
 {
     pub fn angle(self) -> <T as Atan2>::Output {
         self.y.atan2(self.x)
+    }
+}
+
+impl<T> Vector<T> {
+    pub fn x(&self) -> &T {
+        &self.x
+    }
+    pub fn y(&self) -> &T {
+        &self.y
     }
 }
