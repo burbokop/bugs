@@ -42,6 +42,10 @@ impl Bug {
         self.id
     }
 
+    pub(crate) fn chromosome(&self) -> &Chromosome<Float> {
+        &self.chromosome
+    }
+
     pub(crate) fn rotation(&self) -> Float {
         self.rotation
     }
@@ -77,7 +81,7 @@ impl Bug {
     ) -> Self {
         let brain = Brain::new(&chromosome, 0..208);
         let body_genes = &chromosome.genes[208..256];
-        let max_age = Duration::from_secs_f64(body_genes[0] * 60.);
+        let max_age = Duration::from_secs_f64(body_genes[0] * 60. * 60.);
         let color = Color {
             a: 1.,
             r: body_genes[1],
@@ -133,7 +137,7 @@ impl Bug {
 
     fn reproduce_asexually<R: RngCore>(&self, rng: &mut R) -> Bug {
         Bug::give_birth(
-            self.chromosome.mutated_ext(|_| 1., 0.1, rng),
+            self.chromosome.mutated_ext(|_| 0.2, 0.1, rng),
             self.position,
             rng.gen_range(0. ..(PI * 2.)),
         )

@@ -5,11 +5,11 @@ use complexible::complex_numbers::Angle;
 use environment::Environment;
 use math::Point;
 use render::{Camera, RenderModel};
-use slint::{ComponentHandle, PlatformError, RgbaColor, Timer, TimerMode};
+use slint::{ComponentHandle, PlatformError, Timer, TimerMode};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Instant;
-use utils::Float;
+use utils::{color_to_slint_rgba_color, Float};
 
 mod brain;
 mod bug;
@@ -18,15 +18,6 @@ mod environment;
 mod math;
 mod render;
 mod utils;
-
-fn color_to_rgba_color(c: &utils::Color) -> RgbaColor<f32> {
-    RgbaColor {
-        alpha: c.a as f32,
-        red: c.r as f32,
-        green: c.g as f32,
-        blue: c.b as f32,
-    }
-}
 
 slint::slint! {
     export { MainWindow, BugInfo } from "src/main.slint";
@@ -37,6 +28,7 @@ struct State {
     render_model: RefCell<RenderModel>,
     selected_bug_id: Option<usize>,
     time_speed: Float,
+    pause: bool
 }
 
 pub fn main() -> Result<(), PlatformError> {
@@ -51,13 +43,14 @@ pub fn main() -> Result<(), PlatformError> {
             0. ..(width as Float),
             0. ..(height as Float),
             0. ..1.,
-            512,
+            10240,
             (500., 500.).into()
         ),
         selected_bug_id: None,
         camera: Default::default(),
         render_model: Default::default(),
-        time_speed: 0.
+        time_speed: 1.,
+        pause: true,
     }));
 
     let timer = Timer::default();
@@ -74,8 +67,10 @@ pub fn main() -> Result<(), PlatformError> {
                 last_tick_instant = now;
                 let state = weak_state.upgrade().unwrap();
                 let mut state = state.borrow_mut();
-                let time_speed = state.time_speed;
-                state.environment.proceed(dt.mul_f64(time_speed), &mut rng);
+                if !state.pause {
+                    let time_speed = state.time_speed;
+                    state.environment.proceed(dt.mul_f64(time_speed), &mut rng);
+                }
             },
         );
     }
@@ -164,6 +159,9 @@ pub fn main() -> Result<(), PlatformError> {
             if let Ok(lvl) = text.parse::<u32>() {
                 state.time_speed = (2_u32).pow(lvl) as f64;
                 true
+            } else if text == " " {
+                state.pause = !state.pause;
+                true
             } else {false}
         });
     }
@@ -202,15 +200,17 @@ pub fn main() -> Result<(), PlatformError> {
                     window.set_canvas(texture);
                     window.set_fps(1. / dt.as_secs_f32());
                     window.set_time_speed(state.time_speed as f32);
+                    window.set_pause(state.pause);
 
                     if let Some(bug) = state
                         .selected_bug_id
                         .and_then(|id| state.environment.find_bug_by_id(id))
                     {
                         window.set_selected_bug_info(BugInfo {
+                            genes: bug.chromosome().genes.iter().map(|x| *x as f32).collect::<Vec<_>>()[..].into(),
                             age: bug.age(state.environment.now().clone()) as f32,
                             baby_charge: bug.baby_charge() as f32,
-                            color: color_to_rgba_color(bug.color()).into(),
+                            color: color_to_slint_rgba_color(bug.color()).into(),
                             energy_level: bug.energy_level() as f32,
                             id: bug.id() as i32,
                             rotation: Angle::from_radians(bug.rotation()).d.value as f32,

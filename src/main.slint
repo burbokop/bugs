@@ -1,7 +1,8 @@
-import { Slider, GroupBox, HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { Slider, GroupBox, HorizontalBox, VerticalBox, GridBox } from "std-widgets.slint";
 
 export struct BugInfo  {
     id: int,
+    genes: [float],
     x: float,
     y: float,
     rotation: angle,
@@ -25,6 +26,7 @@ export component MainWindow inherits Window {
     in property <image> canvas <=> canvas.source;
     in property <float> fps;
     in property <float> time-speed;
+    in property <bool> pause;
 
     out property <int> requested-canvas-width: canvas.width / 1phx;
     out property <int> requested-canvas-height: canvas.height / 1phx;
@@ -43,7 +45,7 @@ export component MainWindow inherits Window {
         padding: 0;
 
         VerticalBox {
-            width: 400px;
+            width: 500px;
 
             Text {
                 font-size: 20px;
@@ -59,6 +61,11 @@ export component MainWindow inherits Window {
             Text {
                 font-size: 14px;
                 text: "time speed: \{root.time-speed}";
+            }
+
+            Text {
+                font-size: 14px;
+                text: "pause: \{root.pause ? "true" : "false"}";
             }
 
             Text {
@@ -88,7 +95,7 @@ export component MainWindow inherits Window {
             }
             Text {
                 font-size: 14px;
-                text: "age: " + (root.selected-bug-info.age / 1% * 100).round() / 100 + "%";
+                text: "age: " + (root.selected-bug-info.age / 1% * 10000).round() / 100 + "%";
             }
             Text {
                 font-size: 14px;
@@ -97,10 +104,44 @@ export component MainWindow inherits Window {
             }
             Text {
                 font-size: 14px;
-                text: "baby-charge: " + (root.selected-bug-info.baby-charge / 1% * 100).round() / 100 + "%";
+                text: "baby-charge: " + (root.selected-bug-info.baby-charge / 1% * 10000).round() / 100 + "%";
             }
 
-            Empty {}
+            Text {
+                font-size: 14px;
+                text: "genes:";
+            }
+
+            genes-area := Rectangle {
+                for gene[index] in root.selected-bug-info.genes: Rectangle {
+                    x: mod(index, 16) * min(genes-area.width, genes-area.height) / 16;
+                    y: (index / 16) * min(genes-area.width, genes-area.height) / 16;
+
+                    width: min(genes-area.width, genes-area.height) / 16;
+                    height: min(genes-area.width, genes-area.height) / 16;
+
+                    Text {
+                        font-size: 10px;
+                        text: gene;
+                    }
+
+                    background: index < 208
+                        ? #d81159          // brain
+                        : index < 209
+                        ? #8f2d56          // max age
+                        : index < 212
+                        ? #218380          // color
+
+                        : #73d2de;         // not used
+
+                    /**
+                        0..208   - brain
+                        208      - max_age
+                        209..212 - color
+                        212..256 - not used
+                    */
+                }
+            }
         }
 
         canvas := Image {

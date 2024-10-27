@@ -1,7 +1,10 @@
-use std::time::Duration;
-
 use super::Camera;
-use crate::{bug, environment::Environment, math::Size, utils::Float};
+use crate::{
+    bug,
+    environment::Environment,
+    math::Size,
+    utils::{color_to_sdl2_rgba_color, Float},
+};
 use complexible::complex_numbers::{Angle, ComplexNumber};
 use sdl2::{gfx::primitives::DrawRenderer as _, pixels::Color, rect::Rect, surface::Surface};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
@@ -92,6 +95,18 @@ impl RenderModel {
 
                 canvas
                     .filled_trigon(
+                        pp0.real() as i16,
+                        pp0.imag() as i16,
+                        pp1.real() as i16,
+                        pp1.imag() as i16,
+                        pp2.real() as i16,
+                        pp2.imag() as i16,
+                        color_to_sdl2_rgba_color(bug.color()),
+                    )
+                    .unwrap();
+
+                canvas
+                    .trigon(
                         pp0.real() as i16,
                         pp0.imag() as i16,
                         pp1.real() as i16,
