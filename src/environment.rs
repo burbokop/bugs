@@ -1,14 +1,16 @@
+use core::range::Range;
 use std::{
     cell::{Ref, RefCell},
     f64::consts::PI,
+    fmt::Debug,
     sync::atomic::{AtomicUsize, Ordering},
     time::{Duration, Instant},
 };
 
 use crate::{
     bug::{Bug, BUG_ENERGY_CAPACITY},
-    math::{Angle, NoNeg, Point},
-    utils::Float,
+    math::{Angle, NoNeg, Point, Rect, Size},
+    utils::{sample_range_from_range, Float},
 };
 use chromosome::Chromosome;
 use rand::Rng;
@@ -20,6 +22,44 @@ pub(crate) struct Food {
     id: usize,
     position: Point<Float>,
     energy: NoNeg<Float>,
+}
+
+/// Generates food around itself over time
+pub(crate) struct FoodSource {
+    position: Point<Float>,
+    size: Size<Float>,
+    energy_range: Range<Float>,
+    spawn_interval: Duration,
+    last_food_creation_instant: Instant,
+}
+
+pub(crate) struct FoodSourceCreateInfo {
+    pub position: Point<Float>,
+    pub size: Size<Float>,
+    pub energy_range: Range<Float>,
+    pub spawn_interval: Duration,
+}
+
+impl FoodSourceCreateInfo {
+    fn create(self, last_food_creation_instant: Instant) -> FoodSource {
+        FoodSource {
+            position: self.position,
+            size: self.size,
+            energy_range: self.energy_range,
+            spawn_interval: self.spawn_interval,
+            last_food_creation_instant,
+        }
+    }
+}
+
+impl FoodSource {
+    pub(crate) fn position(&self) -> Point<Float> {
+        self.position
+    }
+
+    pub(crate) fn size(&self) -> Size<Float> {
+        self.size
+    }
 }
 
 impl Food {
@@ -81,20 +121,18 @@ pub(crate) enum EnvironmentRequest {
     },
 }
 
-pub(crate) struct Environment<R: SampleRange<Float>> {
+pub(crate) struct Environment {
     food: Vec<Food>,
+    food_sources: Vec<FoodSource>,
     bugs: Vec<RefCell<Bug>>,
     creation_time: Instant,
     now: Instant,
-    x_range: R,
-    y_range: R,
-    food_e_range: R,
-    last_food_creation_instant: Instant,
 }
 
-impl<Range: SampleRange<Float>> Environment<Range> {
-    pub fn new<R: RngCore>(
+impl Environment {
+    pub fn new<R: RngCore, Range: SampleRange<Float>>(
         rng: &mut R,
+        food_sources: Vec<FoodSourceCreateInfo>,
         x_range: Range,
         y_range: Range,
         food_e_range: Range,
@@ -106,13 +144,11 @@ impl<Range: SampleRange<Float>> Environment<Range> {
     {
         let now = Instant::now();
         Self {
-            food: Food::generate_vec(
-                rng,
-                x_range.clone(),
-                y_range.clone(),
-                food_e_range.clone(),
-                food_count,
-            ),
+            food: Food::generate_vec(rng, x_range, y_range, food_e_range, food_count),
+            food_sources: food_sources
+                .into_iter()
+                .map(|x| x.create(now.clone()))
+                .collect(),
             bugs: vec![RefCell::new(Bug::give_birth(
                 Chromosome {
                     genes: (0..256)
@@ -140,10 +176,6 @@ impl<Range: SampleRange<Float>> Environment<Range> {
             ))],
             creation_time: now,
             now,
-            x_range,
-            y_range,
-            food_e_range,
-            last_food_creation_instant: now,
         }
     }
 
@@ -155,23 +187,25 @@ impl<Range: SampleRange<Float>> Environment<Range> {
         &self.creation_time
     }
 
-    pub(crate) fn proceed<R: RngCore>(&mut self, dt: Duration, rng: &mut R)
-    where
-        Range: Clone,
-    {
+    pub(crate) fn proceed<R: RngCore>(&mut self, dt: Duration, rng: &mut R) {
         self.now += dt;
 
-        for _ in 0..(self.now - self.last_food_creation_instant)
-            .div_duration_f64(Duration::from_millis(1000)) as usize
-        {
-            self.food.push(Food::generate(
-                rng,
-                self.x_range.clone(),
-                self.y_range.clone(),
-                self.food_e_range.clone(),
-            ));
+        for food_source in &mut self.food_sources {
+            let n = (self.now - food_source.last_food_creation_instant)
+                .div_duration_f64(food_source.spawn_interval)
+                .round();
+
+            for _ in 0..(n as usize) {
+                let rect = Rect::from_center(food_source.position, food_source.size);
+                self.food.push(Food::generate(
+                    rng,
+                    sample_range_from_range(rect.x_range()),
+                    sample_range_from_range(rect.y_range()),
+                    sample_range_from_range(food_source.energy_range),
+                ));
+            }
+            food_source.last_food_creation_instant += food_source.spawn_interval.mul_f64(n);
         }
-        self.last_food_creation_instant = self.now;
 
         let mut requests: Vec<EnvironmentRequest> = Default::default();
         for b in &self.bugs {
@@ -221,6 +255,10 @@ impl<Range: SampleRange<Float>> Environment<Range> {
 
     pub(crate) fn food(&self) -> &[Food] {
         &self.food
+    }
+
+    pub(crate) fn food_sources(&self) -> &[FoodSource] {
+        &self.food_sources
     }
 
     pub(crate) fn bugs<'a>(&'a self) -> impl Iterator<Item = Ref<'a, Bug>> {

@@ -22,7 +22,7 @@ use crate::{
 use crate::math::Point;
 
 static NEXT_BUG_ID: AtomicUsize = AtomicUsize::new(0);
-pub(crate) static BUG_ENERGY_CAPACITY: NoNeg<Float> = noneg_float(10.);
+pub(crate) static BUG_ENERGY_CAPACITY: NoNeg<Float> = noneg_float(100.);
 
 pub(crate) struct BrainLog {
     pub input: brain::Input,
@@ -99,7 +99,7 @@ impl Bug {
     ) -> Self {
         let brain = Brain::new(&chromosome, 0..208);
         let body_genes = &chromosome.genes[208..256];
-        let max_age = Duration::from_secs_f64(body_genes[0].abs() * 60. * 60.);
+        let max_age = Duration::from_secs_f64(body_genes[0].abs() * 60. * 60. * 60.);
         let color = Color {
             a: 1.,
             r: body_genes[1].rem_euclid(1.),
@@ -141,18 +141,12 @@ impl Bug {
         (self.position - other.position()).angle()
     }
 
-    fn find_nearest_bug<'a, R: SampleRange<Float>>(
-        &self,
-        env: &'a Environment<R>,
-    ) -> Option<Ref<'a, Bug>> {
+    fn find_nearest_bug<'a>(&self, env: &'a Environment) -> Option<Ref<'a, Bug>> {
         env.bugs()
             .min_by(|a, b| self.dst_to_bug(a).partial_cmp(&self.dst_to_bug(b)).unwrap())
     }
 
-    fn find_nearest_food<'a, R: SampleRange<Float>>(
-        &self,
-        env: &'a Environment<R>,
-    ) -> Option<&'a Food> {
+    fn find_nearest_food<'a>(&self, env: &'a Environment) -> Option<&'a Food> {
         env.food().iter().min_by(|a, b| {
             self.dst_to_food(a)
                 .partial_cmp(&&self.dst_to_food(b))
@@ -184,9 +178,9 @@ impl Bug {
         )
     }
 
-    pub(crate) fn proceed<R: RngCore, Range: SampleRange<Float>>(
+    pub(crate) fn proceed<R: RngCore>(
         &mut self,
-        env: &Environment<Range>,
+        env: &Environment,
         dt: Duration,
         rng: &mut R,
     ) -> Vec<EnvironmentRequest> {

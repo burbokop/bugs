@@ -1,12 +1,12 @@
 #![feature(new_range_api)]
 #![feature(extract_if)]
 
-use environment::Environment;
+use environment::{Environment, FoodSource, FoodSourceCreateInfo};
 use math::Point;
 use render::{BrainRenderModel, Camera, EnvironmentRenderModel};
 use slint::{ComponentHandle, PlatformError, Timer, TimerMode};
 use std::rc::Rc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use std::{cell::RefCell, ops::Range};
 use utils::{color_to_slint_rgba_color, Float};
 
@@ -22,7 +22,7 @@ slint::slint! {
     export { MainWindow, BugInfo, EnvInfo } from "src/main.slint";
 }
 struct State {
-    environment: Environment<Range<f64>>,
+    environment: Environment,
     camera: Camera,
     environment_render_model: RefCell<EnvironmentRenderModel>,
     brain_render_model: RefCell<BrainRenderModel>,
@@ -33,19 +33,48 @@ struct State {
 }
 
 pub fn main() -> Result<(), PlatformError> {
-    let width = 1000;
-    let height = 1000;
-
     let mut rng = rand::thread_rng();
 
     let state = Rc::new(RefCell::new(State {
         environment: Environment::new(
             &mut rng,
-            0. ..(width as Float),
-            0. ..(height as Float),
+            vec![
+                FoodSourceCreateInfo {
+                    position: (0., 0.).into(),
+                    size: (1000., 1000.).into(),
+                    energy_range: (0. ..1.).into(),
+                    spawn_interval: Duration::from_millis(1000),
+                },
+                FoodSourceCreateInfo {
+                    position: (0., 2000.).into(),
+                    size: (2000., 2000.).into(),
+                    energy_range: (0. ..1.).into(),
+                    spawn_interval: Duration::from_millis(2000 * 10),
+                },
+                FoodSourceCreateInfo {
+                    position: (-2000., 0.).into(),
+                    size: (2000., 2000.).into(),
+                    energy_range: (0. ..1.).into(),
+                    spawn_interval: Duration::from_millis(4000 * 10),
+                },
+                FoodSourceCreateInfo {
+                    position: (0., -2000.).into(),
+                    size: (2000., 2000.).into(),
+                    energy_range: (0. ..1.).into(),
+                    spawn_interval: Duration::from_millis(8000 * 10),
+                },
+                FoodSourceCreateInfo {
+                    position: (2000., 0.).into(),
+                    size: (2000., 2000.).into(),
+                    energy_range: (0. ..1.).into(),
+                    spawn_interval: Duration::from_millis(16000 * 10),
+                },
+            ],
+            -1000. ..1000.,
+            -1000. ..1000.,
             0. ..1.,
-            512,
-            (500., 500.).into(),
+            32768,
+            (0., 0.).into(),
         ),
         selected_bug_id: None,
         camera: Default::default(),

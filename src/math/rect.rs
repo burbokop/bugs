@@ -1,6 +1,10 @@
-use std::ops::{Add, Sub};
+use core::range::Range;
+use std::{
+    ops::{Add, Div, Sub},
+    process::Output,
+};
 
-use super::Point;
+use super::{Point, Size, Two};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Rect<T> {
@@ -129,5 +133,43 @@ impl<T> Rect<T> {
             }
         }
         result.map(|a| Rect::from_lrtb(a.0, a.1, a.2, a.3))
+    }
+
+    pub(crate) fn from_center(center: Point<T>, size: Size<T>) -> Self
+    where
+        T: Clone + Two + Sub<Output = T> + Div<Output = T>,
+    {
+        Self {
+            x: center.x().clone() - size.w().clone() / T::two(),
+            y: center.y().clone() - size.h().clone() / T::two(),
+            w: size.w().clone(),
+            h: size.h().clone(),
+        }
+    }
+
+    pub(crate) fn x_range(&self) -> Range<T>
+    where
+        T: Clone + Add<Output = T>,
+    {
+        Range {
+            start: self.x.clone(),
+            end: self.w.clone() + self.x.clone(),
+        }
+    }
+
+    pub(crate) fn y_range(&self) -> Range<T>
+    where
+        T: Clone + Add<Output = T>,
+    {
+        Range {
+            start: self.y.clone(),
+            end: self.h.clone() + self.y.clone(),
+        }
+    }
+}
+
+impl<T> From<(Point<T>, Size<T>)> for Rect<T> {
+    fn from(value: (Point<T>, Size<T>)) -> Self {
+        todo!()
     }
 }

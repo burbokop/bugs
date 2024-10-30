@@ -1,3 +1,4 @@
+#[derive(Debug, Clone, Copy)]
 pub struct Size<T> {
     w: T,
     h: T,

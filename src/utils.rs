@@ -1,6 +1,11 @@
 use core::range::Range;
 use std::ops::{Add, Div, Mul, Sub};
 
+use rand::{
+    distributions::uniform::{SampleRange, SampleUniform},
+    RngCore,
+};
+
 use crate::math::NoNeg;
 
 pub type Float = f64;
@@ -66,4 +71,10 @@ pub(crate) fn drain_energy(source: &mut NoNeg<Float>, mut delta_energy: NoNeg<Fl
 
     *source = NoNeg::wrap(*source - delta_energy).unwrap();
     completely_drained
+}
+
+pub(crate) fn sample_range_from_range<T: SampleUniform + PartialOrd>(
+    r: Range<T>,
+) -> impl SampleRange<T> {
+    r.start..r.end
 }

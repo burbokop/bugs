@@ -23,9 +23,9 @@ impl Default for EnvironmentRenderModel {
 }
 
 impl EnvironmentRenderModel {
-    pub fn render<Range: SampleRange<Float>>(
+    pub fn render(
         &mut self,
-        environment: &Environment<Range>,
+        environment: &Environment,
         camera: &Camera,
         selected_bug_id: &Option<usize>,
         requested_canvas_width: u32,
@@ -59,6 +59,20 @@ impl EnvironmentRenderModel {
 
             canvas.set_draw_color(Color::RGB(211, 250, 199));
             canvas.clear();
+
+            canvas.set_draw_color(Color::RGB(0, 255, 87));
+            for source in environment.food_sources() {
+                let position = &transformation * &source.position();
+                let size = &transformation * &source.size();
+
+                canvas
+                    .draw_rect(Rect::from_center(
+                        (*position.x() as i32, *position.y() as i32),
+                        *size.w() as u32,
+                        *size.h() as u32,
+                    ))
+                    .unwrap();
+            }
 
             canvas.set_draw_color(Color::RGB(73, 54, 87));
             for food in environment.food() {
