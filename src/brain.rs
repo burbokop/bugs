@@ -1,5 +1,4 @@
 use crate::{
-    bug::BUG_ENERGY_CAPACITY,
     math::{self, Angle, DeltaAngle, NoNeg},
     utils::{self, Color, Float},
 };
@@ -18,6 +17,10 @@ fn activation_to_angle(a: Float) -> Angle<Float> {
     Angle::from_radians(math::fit_into_range_inclusive(a, -1. ..=1., 0. ..=PI * 2.).unwrap())
 }
 
+fn delta_angle_to_activation(a: DeltaAngle<Float>) -> Float {
+    math::fit_into_range(a.radians(), (-PI * 2.)..PI * 2., -1. ..1.).unwrap()
+}
+
 fn activation_to_noneg_delta_angle(a: Float) -> DeltaAngle<NoNeg<Float>> {
     DeltaAngle::fron_radians(
         NoNeg::wrap(math::fit_into_range_inclusive(a.abs(), 0. ..=1., 0. ..=PI * 2.).unwrap())
@@ -32,6 +35,7 @@ pub(crate) struct Brain {
 #[derive(Debug, Clone)]
 pub(crate) struct Input {
     pub(crate) energy_level: NoNeg<Float>,
+    pub(crate) energy_capacity: NoNeg<Float>,
     pub(crate) rotation: Angle<Float>,
     pub(crate) proximity_to_food: Float,
     pub(crate) direction_to_nearest_food: Angle<Float>,
@@ -39,7 +43,8 @@ pub(crate) struct Input {
     pub(crate) proximity_to_bug: Float,
     pub(crate) direction_to_nearest_bug: Angle<Float>,
     pub(crate) color_of_nearest_bug: Color,
-    pub(crate) baby_charge: NoNeg<Float>,
+    pub(crate) baby_charge_level: NoNeg<Float>,
+    pub(crate) baby_charge_capacity: NoNeg<Float>,
 }
 
 #[derive(Debug, Clone)]
@@ -61,18 +66,26 @@ pub(crate) struct VerboseOutput {
 impl From<Input> for [Float; 16] {
     fn from(value: Input) -> Self {
         utils::normalize([
-            (value.energy_level / BUG_ENERGY_CAPACITY).unwrap(),
+            (value.energy_level / value.energy_capacity).unwrap(),
             angle_to_activation(value.rotation),
             normalizers::sigmoid(value.proximity_to_food / 100.),
-            angle_to_activation(value.direction_to_nearest_food),
+            delta_angle_to_activation(
+                value
+                    .rotation
+                    .signed_distance(value.direction_to_nearest_food),
+            ),
             value.age.unwrap(),
             normalizers::sigmoid(value.proximity_to_bug / 100.),
-            angle_to_activation(value.direction_to_nearest_bug),
+            delta_angle_to_activation(
+                value
+                    .rotation
+                    .signed_distance(value.direction_to_nearest_bug),
+            ),
             value.color_of_nearest_bug.a,
             value.color_of_nearest_bug.r,
             value.color_of_nearest_bug.g,
             value.color_of_nearest_bug.b,
-            value.baby_charge.unwrap(),
+            value.baby_charge_level.unwrap() / value.baby_charge_capacity.unwrap(),
             0.,
             0.,
             0.,
@@ -84,11 +97,11 @@ impl From<Input> for [Float; 16] {
 impl From<Arr<Float, 8>> for Output {
     fn from(value: Arr<Float, 8>) -> Self {
         Self {
-            velocity: value[0],
+            velocity: value[0] * 10.,
             desired_rotation: activation_to_angle(value[1]),
             rotation_velocity: activation_to_noneg_delta_angle(value[2]),
             baby_charging_rate: NoNeg::wrap(
-                math::fit_into_range(value[3], -1. ..1., 0. ..1.).unwrap(),
+                math::fit_into_range_inclusive(value[3].abs(), 0. ..=1., 0. ..=10.).unwrap(),
             )
             .unwrap(),
         }

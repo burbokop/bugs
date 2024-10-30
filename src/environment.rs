@@ -2,14 +2,13 @@ use core::range::Range;
 use std::{
     cell::{Ref, RefCell},
     f64::consts::PI,
-    fmt::Debug,
     sync::atomic::{AtomicUsize, Ordering},
     time::{Duration, Instant},
 };
 
 use crate::{
-    bug::{Bug, BUG_ENERGY_CAPACITY},
-    math::{Angle, NoNeg, Point, Rect, Size},
+    bug::Bug,
+    math::{noneg_float, Angle, NoNeg, Point, Rect, Size},
     utils::{sample_range_from_range, Float},
 };
 use chromosome::Chromosome;
@@ -75,12 +74,12 @@ impl Food {
         self.energy
     }
 
-    pub(crate) fn energy_mut(&mut self) -> &mut NoNeg<Float> {
-        &mut self.energy
+    pub(crate) fn radius(&self) -> NoNeg<Float> {
+        (self.energy / noneg_float(PI)).sqrt() * noneg_float(10.)
     }
 
-    pub(crate) fn set_energy(&mut self, e: NoNeg<Float>) {
-        self.energy = e
+    pub(crate) fn energy_mut(&mut self) -> &mut NoNeg<Float> {
+        &mut self.energy
     }
 
     pub(crate) fn generate<R: RngCore, RR: SampleRange<Float>>(
@@ -171,7 +170,7 @@ impl Environment {
                 },
                 bug_position,
                 Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
-                BUG_ENERGY_CAPACITY,
+                noneg_float(50.),
                 now,
             ))],
             creation_time: now,

@@ -2,12 +2,11 @@ use super::Camera;
 use crate::{
     bug,
     environment::Environment,
-    math::{Complex, Size},
+    math::{Complex, Rect, Size},
     utils::{color_to_sdl2_rgba_color, Float},
 };
 use complexible::complex_numbers::{Angle, ComplexNumber};
-use rand::distributions::uniform::SampleRange;
-use sdl2::{gfx::primitives::DrawRenderer as _, pixels::Color, rect::Rect, surface::Surface};
+use sdl2::{gfx::primitives::DrawRenderer as _, pixels::Color, surface::Surface};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 
 pub struct EnvironmentRenderModel {
@@ -66,7 +65,7 @@ impl EnvironmentRenderModel {
                 let size = &transformation * &source.size();
 
                 canvas
-                    .draw_rect(Rect::from_center(
+                    .draw_rect(sdl2::rect::Rect::from_center(
                         (*position.x() as i32, *position.y() as i32),
                         *size.w() as u32,
                         *size.h() as u32,
@@ -74,19 +73,31 @@ impl EnvironmentRenderModel {
                     .unwrap();
             }
 
-            canvas.set_draw_color(Color::RGB(73, 54, 87));
+            let view_port_rect: Rect<_> = (
+                0.,
+                0.,
+                requested_canvas_width as Float,
+                requested_canvas_height as Float,
+            )
+                .into();
+
             for food in environment.food() {
                 let position = &transformation * &food.position();
                 let size = &transformation
-                    * &Size::from((food.energy().unwrap() * 10., food.energy().unwrap() * 10.));
+                    * &Size::from((food.radius().unwrap() * 2., food.radius().unwrap() * 2.));
 
-                canvas
-                    .fill_rect(Rect::from_center(
-                        (*position.x() as i32, *position.y() as i32),
-                        *size.w() as u32,
-                        *size.h() as u32,
-                    ))
-                    .unwrap();
+                let aabb = Rect::from_center(position, size);
+
+                if view_port_rect.contains(&aabb) || view_port_rect.instersects(&aabb) {
+                    canvas
+                        .filled_circle(
+                            *position.x() as i16,
+                            *position.y() as i16,
+                            (size.w().max(*size.h()) / 2.) as i16,
+                            Color::RGB(73, 54, 87),
+                        )
+                        .unwrap();
+                }
             }
 
             canvas.set_draw_color(Color::RGB(255, 183, 195));
@@ -98,65 +109,68 @@ impl EnvironmentRenderModel {
                 let pos = ComplexNumber::from_cartesian(*position.x(), *position.y());
 
                 let scale = Float::max(*transformation.scale_x(), *transformation.scale_y());
+                let radius = bug::EAT_FOOD_MAX_PROXIMITY.unwrap() * scale * bug.size().unwrap();
 
-                let size = 5. * scale;
+                let size = 5. * scale * bug.size().unwrap();
 
-                let p0 = ComplexNumber::from_cartesian(4. * size, 0. * size);
-                let p1 = ComplexNumber::from_cartesian(-1. * size, -1. * size);
-                let p2 = ComplexNumber::from_cartesian(-1. * size, 1. * size);
+                let aabb = Rect::from_center(position, (radius * 2., radius * 2.).into());
 
-                let pp0 = p0.mul(&rotation).add(&pos);
-                let pp1 = p1.mul(&rotation).add(&pos);
-                let pp2 = p2.mul(&rotation).add(&pos);
+                if view_port_rect.contains(&aabb) || view_port_rect.instersects(&aabb) {
+                    let p0 = ComplexNumber::from_cartesian(4. * size, 0. * size);
+                    let p1 = ComplexNumber::from_cartesian(-1. * size, -1. * size);
+                    let p2 = ComplexNumber::from_cartesian(-1. * size, 1. * size);
 
-                canvas
-                    .filled_trigon(
-                        pp0.real() as i16,
-                        pp0.imag() as i16,
-                        pp1.real() as i16,
-                        pp1.imag() as i16,
-                        pp2.real() as i16,
-                        pp2.imag() as i16,
-                        color_to_sdl2_rgba_color(bug.color()),
-                    )
-                    .unwrap();
+                    let pp0 = p0.mul(&rotation).add(&pos);
+                    let pp1 = p1.mul(&rotation).add(&pos);
+                    let pp2 = p2.mul(&rotation).add(&pos);
 
-                canvas
-                    .trigon(
-                        pp0.real() as i16,
-                        pp0.imag() as i16,
-                        pp1.real() as i16,
-                        pp1.imag() as i16,
-                        pp2.real() as i16,
-                        pp2.imag() as i16,
-                        Color::RGB(255, 183, 195),
-                    )
-                    .unwrap();
+                    canvas
+                        .filled_trigon(
+                            pp0.real() as i16,
+                            pp0.imag() as i16,
+                            pp1.real() as i16,
+                            pp1.imag() as i16,
+                            pp2.real() as i16,
+                            pp2.imag() as i16,
+                            color_to_sdl2_rgba_color(bug.color()),
+                        )
+                        .unwrap();
 
-                if &Some(bug.id()) == selected_bug_id {
-                    let radius = bug::EAT_FOOD_MAX_PROXIMITY * scale;
+                    canvas
+                        .trigon(
+                            pp0.real() as i16,
+                            pp0.imag() as i16,
+                            pp1.real() as i16,
+                            pp1.imag() as i16,
+                            pp2.real() as i16,
+                            pp2.imag() as i16,
+                            Color::RGB(255, 183, 195),
+                        )
+                        .unwrap();
 
-                    if let Some(log) = bug.last_brain_log() {
-                        let rl = Complex::from_polar(radius, log.output.desired_rotation);
+                    if &Some(bug.id()) == selected_bug_id {
+                        if let Some(log) = bug.last_brain_log() {
+                            let rl = Complex::from_polar(radius, log.output.desired_rotation);
+                            canvas
+                                .line(
+                                    *position.x() as i16,
+                                    *position.y() as i16,
+                                    *position.x() as i16 + *rl.real() as i16,
+                                    *position.y() as i16 + *rl.imag() as i16,
+                                    Color::RGB(255, 183, 195),
+                                )
+                                .unwrap();
+                        }
+
                         canvas
-                            .line(
+                            .circle(
                                 *position.x() as i16,
                                 *position.y() as i16,
-                                *position.x() as i16 + *rl.real() as i16,
-                                *position.y() as i16 + *rl.imag() as i16,
+                                radius as i16,
                                 Color::RGB(255, 183, 195),
                             )
                             .unwrap();
                     }
-
-                    canvas
-                        .circle(
-                            *position.x() as i16,
-                            *position.y() as i16,
-                            radius as i16,
-                            Color::RGB(255, 183, 195),
-                        )
-                        .unwrap();
                 }
             }
 

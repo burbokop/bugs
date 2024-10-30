@@ -1,14 +1,15 @@
 import { Slider, GroupBox, HorizontalBox, VerticalBox, GridBox } from "std-widgets.slint";
 
 export struct BugBrainInput {
-    energy-level: float,
+    relative-energy: float,
+    rotation: angle,
     proximity-to-food: float,
     direction-to-nearest-food: float,
     age: float,
     proximity-to-bug: float,
     direction-to-nearest-bug: float,
     color-of-nearest-bug: color,
-    baby-charge: float,
+    relative-baby-charge: float,
 }
 
 export struct BugBrainOutput {
@@ -31,9 +32,11 @@ export struct BugInfo  {
     rotation: angle,
     size: float,
     energy-level: float,
+    energy-capacity: float,
     age: percent,
     color: color,
-    baby-charge: percent,
+    baby-charge-level: float,
+    baby-charge-capacity: float,
 }
 
 export struct EnvInfo {
@@ -134,7 +137,7 @@ export component MainWindow inherits Window {
             }
             Text {
                 font-size: 14px;
-                text: "energy-level: " + (root.selected-bug-info.energy-level * 100).round() / 100;
+                text: "energy-level: \{(root.selected-bug-info.energy-level * 100).round() / 100} / \{(root.selected-bug-info.energy-capacity * 100).round() / 100}";
             }
             Text {
                 font-size: 14px;
@@ -147,7 +150,7 @@ export component MainWindow inherits Window {
             }
             Text {
                 font-size: 14px;
-                text: "baby-charge: " + (root.selected-bug-info.baby-charge / 1% * 10000).round() / 100 + "%";
+                text: "baby-charge: \{(root.selected-bug-info.baby-charge-level * 100).round() / 100} / \{(root.selected-bug-info.baby-charge-capacity * 100).round() / 100}";
             }
 
             Text {
@@ -157,7 +160,12 @@ export component MainWindow inherits Window {
 
             Text {
                 font-size: 14px;
-                text: "         energy_level: " + root.selected-bug-last-brain-log.input.energy_level;
+                text: "         energy_level: \{(root.selected-bug-last-brain-log.input.relative-energy * 100).round() / 100}";
+            }
+
+            Text {
+                font-size: 14px;
+                text: "         rotation: " + (root.selected-bug-last-brain-log.input.rotation / 1deg).round() + "°";
             }
 
             Text {
@@ -192,7 +200,7 @@ export component MainWindow inherits Window {
 
             Text {
                 font-size: 14px;
-                text: "         baby_charge: \{root.selected-bug-last-brain-log.input.baby_charge}";
+                text: "         baby_charge: \{(root.selected-bug-last-brain-log.input.relative-baby-charge * 100).round()/100}";
             }
 
             Text {
@@ -237,7 +245,9 @@ export component MainWindow inherits Window {
                         ? #d81159          // brain
                         : index < 209
                         ? #8f2d56          // max age
-                        : index < 212
+                        : index < 210
+                        ? #8ffd56          // max size
+                        : index < 213
                         ? #218380          // color
 
                         : #73d2de;         // not used

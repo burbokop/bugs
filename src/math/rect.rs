@@ -166,10 +166,44 @@ impl<T> Rect<T> {
             end: self.h.clone() + self.y.clone(),
         }
     }
+
+    pub(crate) fn contains(&self, other: &Rect<T>) -> bool
+    where
+        T: PartialOrd + Add<Output = T> + Clone,
+    {
+        return other.left() >= self.left()
+            && other.right() <= self.right()
+            && other.top() >= self.top()
+            && other.bottom() <= self.bottom();
+    }
+
+    pub(crate) fn instersects(&self, other: &Rect<T>) -> bool
+    where
+        T: PartialOrd + Add<Output = T> + Clone,
+    {
+        let max = |x, y| if x > y { x } else { y };
+        let min = |x, y| if x < y { x } else { y };
+        let l = max(self.left(), other.left());
+        let r = min(self.right(), other.right());
+        let t = max(self.top(), other.top());
+        let b = min(self.bottom(), other.bottom());
+        return l < r && t < b;
+    }
 }
 
 impl<T> From<(Point<T>, Size<T>)> for Rect<T> {
     fn from(value: (Point<T>, Size<T>)) -> Self {
         todo!()
+    }
+}
+
+impl<T> From<(T, T, T, T)> for Rect<T> {
+    fn from(value: (T, T, T, T)) -> Self {
+        Self {
+            x: value.0,
+            y: value.1,
+            w: value.2,
+            h: value.3,
+        }
     }
 }
