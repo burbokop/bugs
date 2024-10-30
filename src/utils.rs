@@ -36,7 +36,12 @@ pub(crate) fn normalize<const SIZE: usize>(v: [Float; SIZE]) -> [Float; SIZE] {
     v.map(|x| x / max)
 }
 
-pub(crate) fn transfer_energy(source: &mut NoNeg<Float>, dst: &mut NoNeg<Float>, mut delta_energy: NoNeg<Float>, capacity: NoNeg<Float>) -> bool {
+pub(crate) fn transfer_energy(
+    source: &mut NoNeg<Float>,
+    dst: &mut NoNeg<Float>,
+    mut delta_energy: NoNeg<Float>,
+    capacity: NoNeg<Float>,
+) -> bool {
     let mut completely_drained: bool = false;
     if *source < delta_energy {
         delta_energy = *source;

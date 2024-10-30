@@ -1,7 +1,6 @@
 #![feature(new_range_api)]
 #![feature(extract_if)]
 
-use complexible::complex_numbers::Angle;
 use environment::Environment;
 use math::Point;
 use render::{BrainRenderModel, Camera, EnvironmentRenderModel};
@@ -20,7 +19,7 @@ mod render;
 mod utils;
 
 slint::slint! {
-    export { MainWindow, BugInfo } from "src/main.slint";
+    export { MainWindow, BugInfo, EnvInfo } from "src/main.slint";
 }
 struct State {
     environment: Environment<Range<f64>>,
@@ -91,15 +90,25 @@ pub fn main() -> Result<(), PlatformError> {
                 * &Point::from((x as Float, y as Float));
 
             if k == 0 {
-                let selected_bug_id = state.environment.bugs().find_map(|bug| {
-                    if (point - bug.position()).len() < bug::EAT_FOOD_MAX_PROXIMITY {
-                        Some(bug.id())
-                    } else {
-                        None
-                    }
-                });
+                let nearest_bug = state
+                    .environment
+                    .bugs()
+                    .min_by(|a, b| {
+                        (point - a.position())
+                            .len()
+                            .partial_cmp(&(point - b.position()).len())
+                            .unwrap()
+                    })
+                    .map(|bug| (bug.id(), bug.position()));
 
-                state.selected_bug_id = selected_bug_id;
+                if let Some(nearest_bug) = nearest_bug {
+                    state.selected_bug_id =
+                        if (point - nearest_bug.1).len() < bug::EAT_FOOD_MAX_PROXIMITY {
+                            Some(nearest_bug.0)
+                        } else {
+                            None
+                        };
+                }
             }
         });
     }
@@ -219,9 +228,16 @@ pub fn main() -> Result<(), PlatformError> {
                         window.get_requested_env_canvas_height() as u32,
                     );
                     window.set_env_canvas(texture);
+                    window.set_env_info(EnvInfo {
+                        now: state
+                            .environment
+                            .now()
+                            .duration_since(state.environment.creation_time().clone())
+                            .as_millis() as i64,
+                        pause: state.pause,
+                        time_speed: state.time_speed as f32,
+                    });
                     window.set_fps(1. / dt.as_secs_f32());
-                    window.set_time_speed(state.time_speed as f32);
-                    window.set_pause(state.pause);
 
                     if let Some(bug) = state
                         .selected_bug_id
@@ -240,7 +256,7 @@ pub fn main() -> Result<(), PlatformError> {
                             color: color_to_slint_rgba_color(bug.color()).into(),
                             energy_level: bug.energy_level().unwrap() as f32,
                             id: bug.id() as i32,
-                            rotation: Angle::from_radians(bug.rotation()).d.value as f32,
+                            rotation: bug.rotation().degrees() as f32,
                             size: bug.size().unwrap() as f32,
                             x: *bug.position().x() as f32,
                             y: *bug.position().y() as f32,
@@ -268,18 +284,27 @@ pub fn main() -> Result<(), PlatformError> {
                                     direction_to_nearest_bug: brain_log
                                         .input
                                         .direction_to_nearest_bug
+                                        .degrees()
                                         as f32,
                                     direction_to_nearest_food: brain_log
                                         .input
                                         .direction_to_nearest_food
+                                        .degrees()
                                         as f32,
                                     energy_level: brain_log.input.energy_level.unwrap() as f32,
                                     proximity_to_bug: brain_log.input.proximity_to_bug as f32,
                                     proximity_to_food: brain_log.input.proximity_to_food as f32,
                                 },
                                 output: BugBrainOutput {
-                                    baby_charging_rate: brain_log.output.baby_charging_rate.unwrap() as f32,
-                                    rotation_velocity: brain_log.output.rotation_velocity as f32,
+                                    baby_charging_rate: brain_log.output.baby_charging_rate.unwrap()
+                                        as f32,
+                                    desired_rotation: brain_log.output.desired_rotation.degrees()
+                                        as f32,
+                                    rotation_velocity: brain_log
+                                        .output
+                                        .rotation_velocity
+                                        .unwrap_degrees()
+                                        as f32,
                                     velocity: brain_log.output.velocity as f32,
                                 },
                             });

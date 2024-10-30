@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     bug::{Bug, BUG_ENERGY_CAPACITY},
-    math::{NoNeg, Point},
+    math::{Angle, NoNeg, Point},
     utils::Float,
 };
 use chromosome::Chromosome;
@@ -84,6 +84,7 @@ pub(crate) enum EnvironmentRequest {
 pub(crate) struct Environment<R: SampleRange<Float>> {
     food: Vec<Food>,
     bugs: Vec<RefCell<Bug>>,
+    creation_time: Instant,
     now: Instant,
     x_range: R,
     y_range: R,
@@ -116,8 +117,14 @@ impl<Range: SampleRange<Float>> Environment<Range> {
                 Chromosome {
                     genes: (0..256)
                         .map(|i| {
-                            if i == 0 || i == 128 || i == 128 + 8 + 8 {
+                            if i == 0 {
                                 1.
+                            } else if i == 128 {
+                                2.
+                            } else if i == 128 + 8 + 8 + 8 {
+                                0.5
+                            // } else if i == 16 + 1 || i == 128 + 8 + 1 {
+                            //     2.
                             } else if (0..208).contains(&i) {
                                 0.
                             } else {
@@ -127,10 +134,11 @@ impl<Range: SampleRange<Float>> Environment<Range> {
                         .collect(),
                 },
                 bug_position,
-                rng.gen_range(0. ..PI),
+                Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
                 BUG_ENERGY_CAPACITY,
                 now,
             ))],
+            creation_time: now,
             now,
             x_range,
             y_range,
@@ -143,21 +151,27 @@ impl<Range: SampleRange<Float>> Environment<Range> {
         &self.now
     }
 
+    pub(crate) fn creation_time(&self) -> &Instant {
+        &self.creation_time
+    }
+
     pub(crate) fn proceed<R: RngCore>(&mut self, dt: Duration, rng: &mut R)
     where
         Range: Clone,
     {
         self.now += dt;
 
-        if self.now - self.last_food_creation_instant > Duration::from_millis(10) {
+        for _ in 0..(self.now - self.last_food_creation_instant)
+            .div_duration_f64(Duration::from_millis(1000)) as usize
+        {
             self.food.push(Food::generate(
                 rng,
                 self.x_range.clone(),
                 self.y_range.clone(),
                 self.food_e_range.clone(),
             ));
-            self.last_food_creation_instant = self.now;
         }
+        self.last_food_creation_instant = self.now;
 
         let mut requests: Vec<EnvironmentRequest> = Default::default();
         for b in &self.bugs {

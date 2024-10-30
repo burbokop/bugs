@@ -6,7 +6,6 @@ use std::{
 };
 
 use chromosome::Chromosome;
-use complexible::complex_numbers::{Angle, ComplexNumber};
 use rand::RngCore;
 use rand::{distributions::uniform::SampleRange, Rng};
 
@@ -16,7 +15,7 @@ use crate::{
     brain::{self, Brain, VerboseOutput},
     chromo_utils::ExtendedChromosome as _,
     environment::{Environment, EnvironmentRequest, Food},
-    math::{noneg_float, AbsAsNoNeg as _, NoNeg},
+    math::{map_into_range, noneg_float, sign, AbsAsNoNeg as _, Angle, Complex, DeltaAngle, NoNeg},
     utils::{self, Color, Float},
 };
 
@@ -37,7 +36,7 @@ pub(crate) struct Bug {
     brain: Brain,
     last_brain_log: Option<BrainLog>,
     position: Point<Float>,
-    rotation: Float,
+    rotation: Angle<Float>,
     size: NoNeg<Float>,
     energy_level: NoNeg<Float>,
     birth_instant: Instant,
@@ -63,7 +62,7 @@ impl Bug {
         &self.last_brain_log
     }
 
-    pub(crate) fn rotation(&self) -> Float {
+    pub(crate) fn rotation(&self) -> Angle<Float> {
         self.rotation
     }
 
@@ -94,7 +93,7 @@ impl Bug {
     pub(crate) fn give_birth(
         chromosome: Chromosome<Float>,
         position: Point<Float>,
-        rotation: Float,
+        rotation: Angle<Float>,
         energy_level: NoNeg<Float>,
         now: Instant,
     ) -> Self {
@@ -103,9 +102,9 @@ impl Bug {
         let max_age = Duration::from_secs_f64(body_genes[0].abs() * 60. * 60.);
         let color = Color {
             a: 1.,
-            r: body_genes[1],
-            g: body_genes[2],
-            b: body_genes[3],
+            r: body_genes[1].rem_euclid(1.),
+            g: body_genes[2].rem_euclid(1.),
+            b: body_genes[3].rem_euclid(1.),
         };
 
         Self {
@@ -133,12 +132,12 @@ impl Bug {
     }
 
     /// return in redians
-    fn direction_to_bug(&self, other: &Bug) -> Float {
+    fn direction_to_bug(&self, other: &Bug) -> Angle<Float> {
         (self.position - other.position()).angle()
     }
 
     /// return in redians
-    fn direction_to_food(&self, other: &Food) -> Float {
+    fn direction_to_food(&self, other: &Food) -> Angle<Float> {
         (self.position - other.position()).angle()
     }
 
@@ -165,7 +164,7 @@ impl Bug {
         Bug::give_birth(
             self.chromosome.mutated_ext(|_| 0.01..10., 0.01, rng),
             self.position,
-            rng.gen_range(0. ..(PI * 2.)),
+            Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
             noneg_float(1.),
             now,
         )
@@ -177,7 +176,12 @@ impl Bug {
 
     /// return true if food is completely drained
     pub(crate) fn eat(&mut self, food: &mut Food, delta_energy: NoNeg<Float>) -> bool {
-        utils::transfer_energy(food.energy_mut(), &mut self.energy_level, delta_energy, BUG_ENERGY_CAPACITY)
+        utils::transfer_energy(
+            food.energy_mut(),
+            &mut self.energy_level,
+            delta_energy,
+            BUG_ENERGY_CAPACITY,
+        )
     }
 
     pub(crate) fn proceed<R: RngCore, Range: SampleRange<Float>>(
@@ -194,9 +198,9 @@ impl Bug {
         };
 
         let direction_to_nearest_food = if let Some(nearest_food) = nearest_food {
-            self.direction_to_food(nearest_food) / PI / 2.
+            self.direction_to_food(nearest_food)
         } else {
-            0.
+            Angle::from_radians(0.)
         };
 
         let age = self.age(env.now().clone());
@@ -209,9 +213,9 @@ impl Bug {
         };
 
         let direction_to_nearest_bug = if let Some(nearest_bug) = &nearest_bug {
-            self.direction_to_bug(&nearest_bug) / PI / 2.
+            self.direction_to_bug(&nearest_bug)
         } else {
-            0.
+            Angle::from_radians(0.)
         };
 
         let color_of_nearest_bug = if let Some(nearest_bug) = &nearest_bug {
@@ -227,6 +231,7 @@ impl Bug {
 
         let brain_input = brain::Input {
             energy_level: self.energy_level,
+            rotation: self.rotation,
             proximity_to_food,
             direction_to_nearest_food,
             age,
@@ -248,20 +253,34 @@ impl Bug {
         });
 
         {
-            let delta_rotation = brain_output.rotation_velocity * 0.01 * dt.as_secs_f64();
-            self.rotation = (self.rotation + delta_rotation) % (PI * 2.);
+            let raw_delta = brain_output
+                .desired_rotation
+                .signed_distance(self.rotation)
+                .radians();
 
-            let delta_energy = delta_rotation.abs_as_noneg() * noneg_float(0.001);
-            utils::drain_energy(&mut self.energy_level, delta_energy);
+            if raw_delta.abs() > 0.001 {
+                let delta_rotation = DeltaAngle::fron_radians(
+                    sign(raw_delta)
+                        * raw_delta
+                            .abs()
+                            .min(brain_output.rotation_velocity.unwrap_radians())
+                        * 0.01
+                        * dt.as_secs_f64(),
+                );
+
+                self.rotation += delta_rotation;
+
+                let delta_energy = delta_rotation.radians().abs_as_noneg() * noneg_float(0.001);
+                utils::drain_energy(&mut self.energy_level, delta_energy);
+            }
         }
 
         {
             let delta_distance = brain_output.velocity * dt.as_secs_f64();
-            let new_pos =
-                ComplexNumber::from_cartesian(*self.position.x(), *self.position.y()).add(
-                    &ComplexNumber::from_polar(delta_distance, Angle::from_radians(self.rotation)),
-                );
-            self.position = (new_pos.real(), new_pos.imag()).into();
+            let new_pos = Complex::from_cartesian(*self.position.x(), *self.position.y())
+                + Complex::from_polar(delta_distance, self.rotation);
+
+            self.position = (*new_pos.real(), *new_pos.imag()).into();
 
             let delta_energy = delta_distance.abs_as_noneg() * noneg_float(0.001);
             utils::drain_energy(&mut self.energy_level, delta_energy);
@@ -272,7 +291,12 @@ impl Bug {
                 * noneg_float(0.01)
                 * NoNeg::wrap(dt.as_secs_f64()).unwrap();
 
-            utils::transfer_energy(&mut self.energy_level, &mut self.baby_charge, delta_energy, noneg_float(1.));
+            utils::transfer_energy(
+                &mut self.energy_level,
+                &mut self.baby_charge,
+                delta_energy,
+                noneg_float(1.),
+            );
         }
 
         let mut requests: Vec<EnvironmentRequest> = Default::default();

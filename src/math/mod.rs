@@ -1,3 +1,4 @@
+mod angle;
 mod complex;
 mod matrix;
 mod misc;
@@ -8,6 +9,7 @@ mod size;
 mod traits;
 mod vector;
 
+pub use angle::*;
 pub use complex::*;
 pub use matrix::*;
 pub use misc::*;

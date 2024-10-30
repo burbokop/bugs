@@ -1,13 +1,29 @@
 use crate::{
     bug::BUG_ENERGY_CAPACITY,
-    math::{map_into_range, NoNeg},
+    math::{self, Angle, DeltaAngle, NoNeg},
     utils::{self, Color, Float},
 };
 use chromosome::Chromosome;
 use core::range::Range;
 use simple_neural_net::{normalizers, Arr, Layer as _, PerceptronLayer};
+use std::f64::consts::PI;
 
 simple_neural_net::compose_layers!(Net, 16, 8, 8);
+
+fn angle_to_activation(a: Angle<Float>) -> Float {
+    math::fit_into_range(a.radians(), 0. ..PI * 2., -1. ..1.).unwrap()
+}
+
+fn activation_to_angle(a: Float) -> Angle<Float> {
+    Angle::from_radians(math::fit_into_range_inclusive(a, -1. ..=1., 0. ..=PI * 2.).unwrap())
+}
+
+fn activation_to_noneg_delta_angle(a: Float) -> DeltaAngle<NoNeg<Float>> {
+    DeltaAngle::fron_radians(
+        NoNeg::wrap(math::fit_into_range_inclusive(a.abs(), 0. ..=1., 0. ..=PI * 2.).unwrap())
+            .unwrap(),
+    )
+}
 
 pub(crate) struct Brain {
     net: Net<Float>,
@@ -16,11 +32,12 @@ pub(crate) struct Brain {
 #[derive(Debug, Clone)]
 pub(crate) struct Input {
     pub(crate) energy_level: NoNeg<Float>,
+    pub(crate) rotation: Angle<Float>,
     pub(crate) proximity_to_food: Float,
-    pub(crate) direction_to_nearest_food: Float,
+    pub(crate) direction_to_nearest_food: Angle<Float>,
     pub(crate) age: NoNeg<Float>,
     pub(crate) proximity_to_bug: Float,
-    pub(crate) direction_to_nearest_bug: Float,
+    pub(crate) direction_to_nearest_bug: Angle<Float>,
     pub(crate) color_of_nearest_bug: Color,
     pub(crate) baby_charge: NoNeg<Float>,
 }
@@ -29,8 +46,9 @@ pub(crate) struct Input {
 pub(crate) struct Output {
     /// in pixels per second
     pub(crate) velocity: Float,
-    /// radians per second
-    pub(crate) rotation_velocity: Float,
+    pub(crate) desired_rotation: Angle<Float>,
+    /// per second
+    pub(crate) rotation_velocity: DeltaAngle<NoNeg<Float>>,
     /// energy per second
     pub(crate) baby_charging_rate: NoNeg<Float>,
 }
@@ -44,17 +62,17 @@ impl From<Input> for [Float; 16] {
     fn from(value: Input) -> Self {
         utils::normalize([
             (value.energy_level / BUG_ENERGY_CAPACITY).unwrap(),
+            angle_to_activation(value.rotation),
             normalizers::sigmoid(value.proximity_to_food / 100.),
-            value.direction_to_nearest_food,
+            angle_to_activation(value.direction_to_nearest_food),
             value.age.unwrap(),
             normalizers::sigmoid(value.proximity_to_bug / 100.),
-            value.direction_to_nearest_bug,
+            angle_to_activation(value.direction_to_nearest_bug),
             value.color_of_nearest_bug.a,
             value.color_of_nearest_bug.r,
             value.color_of_nearest_bug.g,
             value.color_of_nearest_bug.b,
             value.baby_charge.unwrap(),
-            0.,
             0.,
             0.,
             0.,
@@ -67,8 +85,12 @@ impl From<Arr<Float, 8>> for Output {
     fn from(value: Arr<Float, 8>) -> Self {
         Self {
             velocity: value[0],
-            rotation_velocity: value[1],
-            baby_charging_rate: NoNeg::wrap(map_into_range(value[2], -1. ..1., 0. ..1.)).unwrap(),
+            desired_rotation: activation_to_angle(value[1]),
+            rotation_velocity: activation_to_noneg_delta_angle(value[2]),
+            baby_charging_rate: NoNeg::wrap(
+                math::fit_into_range(value[3], -1. ..1., 0. ..1.).unwrap(),
+            )
+            .unwrap(),
         }
     }
 }

@@ -6,7 +6,7 @@ use std::{
 
 use crate::utils::Float;
 
-use super::{Abs, IsNeg};
+use super::{Abs, IsNeg, Pi};
 
 /// Can not store negative numbers
 #[derive(Clone, Copy, Debug)]
@@ -22,11 +22,11 @@ impl<T> Display for NoNeg<T> {
 
 #[derive(Debug)]
 pub(crate) struct NegError<T> {
-    original_value: T
+    original_value: T,
 }
 
 impl<T> NegError<T> {
-    pub(crate)  fn original_value(self)-> T {
+    pub(crate) fn original_value(self) -> T {
         self.original_value
     }
 }
@@ -53,7 +53,9 @@ impl<T> NoNeg<T> {
         T: IsNeg,
     {
         if value.is_neg() {
-            Err(NegError { original_value: value })
+            Err(NegError {
+                original_value: value,
+            })
         } else {
             Ok(Self { value })
         }
@@ -165,6 +167,15 @@ where
     type Output = <T as Abs>::Output;
     fn abs_as_noneg(self) -> NoNeg<Self::Output> {
         NoNeg { value: self.abs() }
+    }
+}
+
+impl<T> Pi for NoNeg<T>
+where
+    T: Pi,
+{
+    fn pi() -> Self {
+        Self { value: T::pi() }
     }
 }
 

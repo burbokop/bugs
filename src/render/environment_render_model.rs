@@ -2,7 +2,7 @@ use super::Camera;
 use crate::{
     bug,
     environment::Environment,
-    math::Size,
+    math::{Complex, Size},
     utils::{color_to_sdl2_rgba_color, Float},
 };
 use complexible::complex_numbers::{Angle, ComplexNumber};
@@ -79,7 +79,8 @@ impl EnvironmentRenderModel {
             for bug in environment.bugs() {
                 let position = &transformation * &bug.position();
 
-                let rotation = ComplexNumber::from_polar(1., Angle::from_radians(bug.rotation()));
+                let rotation =
+                    ComplexNumber::from_polar(1., Angle::from_radians(bug.rotation().radians()));
                 let pos = ComplexNumber::from_cartesian(*position.x(), *position.y());
 
                 let scale = Float::max(*transformation.scale_x(), *transformation.scale_y());
@@ -119,11 +120,26 @@ impl EnvironmentRenderModel {
                     .unwrap();
 
                 if &Some(bug.id()) == selected_bug_id {
+                    let radius = bug::EAT_FOOD_MAX_PROXIMITY * scale;
+
+                    if let Some(log) = bug.last_brain_log() {
+                        let rl = Complex::from_polar(radius, log.output.desired_rotation);
+                        canvas
+                            .line(
+                                *position.x() as i16,
+                                *position.y() as i16,
+                                *position.x() as i16 + *rl.real() as i16,
+                                *position.y() as i16 + *rl.imag() as i16,
+                                Color::RGB(255, 183, 195),
+                            )
+                            .unwrap();
+                    }
+
                     canvas
                         .circle(
                             *position.x() as i16,
                             *position.y() as i16,
-                            (bug::EAT_FOOD_MAX_PROXIMITY * scale) as i16,
+                            radius as i16,
                             Color::RGB(255, 183, 195),
                         )
                         .unwrap();

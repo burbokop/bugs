@@ -1,6 +1,6 @@
 use std::ops::{Add, Mul};
 
-use super::{Atan2, Sqr, Sqrt};
+use super::{Angle, Atan2, Sqr, Sqrt};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Vector<T> {
@@ -46,7 +46,7 @@ impl<T> Vector<T>
 where
     T: Atan2,
 {
-    pub fn angle(self) -> <T as Atan2>::Output {
+    pub fn angle(self) -> Angle<<T as Atan2>::Output> {
         self.y.atan2(self.x)
     }
 }

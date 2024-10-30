@@ -1,22 +1,20 @@
 import { Slider, GroupBox, HorizontalBox, VerticalBox, GridBox } from "std-widgets.slint";
 
 export struct BugBrainInput {
-    energy_level: float,
-    proximity_to_food: float,
-    direction_to_nearest_food: float,
+    energy-level: float,
+    proximity-to-food: float,
+    direction-to-nearest-food: float,
     age: float,
-    proximity_to_bug: float,
-    direction_to_nearest_bug: float,
-    color_of_nearest_bug: color,
-    baby_charge: float,
+    proximity-to-bug: float,
+    direction-to-nearest-bug: float,
+    color-of-nearest-bug: color,
+    baby-charge: float,
 }
 
 export struct BugBrainOutput {
-    /// in pixels per second
     velocity: float,
-    /// radians per second
+    desired-rotation: float,
     rotation-velocity: float,
-    /// energy per second
     baby-charging-rate: float,
 }
 
@@ -38,6 +36,13 @@ export struct BugInfo  {
     baby-charge: percent,
 }
 
+export struct EnvInfo {
+    // seconds from start of experiment
+    now: duration,
+    time-speed: float,
+    pause: bool,
+}
+
 component Empty {}
 
 global Utils {
@@ -51,8 +56,7 @@ export component MainWindow inherits Window {
     in property <image> brain-canvas <=> brain-canvas.source;
 
     in property <float> fps;
-    in property <float> time-speed;
-    in property <bool> pause;
+    in property <EnvInfo> env-info;
     in property <BugInfo> selected-bug-info;
     in property <BugBrainLog> selected-bug-last-brain-log;
 
@@ -94,12 +98,17 @@ export component MainWindow inherits Window {
 
             Text {
                 font-size: 14px;
-                text: "time speed: \{root.time-speed}";
+                text: "time speed: \{(root.env-info.now/1s).round()}s";
             }
 
             Text {
                 font-size: 14px;
-                text: "pause: \{root.pause ? "true" : "false"}";
+                text: "time speed: \{root.env-info.time-speed}";
+            }
+
+            Text {
+                font-size: 14px;
+                text: "pause: \{root.env-info.pause ? "true" : "false"}";
             }
 
             Text {
@@ -198,7 +207,12 @@ export component MainWindow inherits Window {
 
             Text {
                 font-size: 14px;
-                text: "         rotation_velocity: \{root.selected-bug-last-brain-log.output.rotation-velocity}";
+                text: "         desired_rotation: \{root.selected-bug-last-brain-log.output.desired-rotation}°";
+            }
+
+            Text {
+                font-size: 14px;
+                text: "         rotation_velocity: \{root.selected-bug-last-brain-log.output.rotation-velocity}°/s";
             }
 
             Text {
