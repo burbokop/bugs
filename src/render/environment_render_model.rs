@@ -6,6 +6,7 @@ use crate::{
     utils::{color_to_sdl2_rgba_color, Float},
 };
 use complexible::complex_numbers::{Angle, ComplexNumber};
+use rand::distributions::uniform::SampleRange;
 use sdl2::{gfx::primitives::DrawRenderer as _, pixels::Color, rect::Rect, surface::Surface};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 
@@ -22,9 +23,9 @@ impl Default for EnvironmentRenderModel {
 }
 
 impl EnvironmentRenderModel {
-    pub fn render(
+    pub fn render<Range: SampleRange<Float>>(
         &mut self,
-        environment: &Environment,
+        environment: &Environment<Range>,
         camera: &Camera,
         selected_bug_id: &Option<usize>,
         requested_canvas_width: u32,
@@ -62,8 +63,8 @@ impl EnvironmentRenderModel {
             canvas.set_draw_color(Color::RGB(73, 54, 87));
             for food in environment.food() {
                 let position = &transformation * &food.position();
-                let size =
-                    &transformation * &Size::from((food.energy() * 10., food.energy() * 10.));
+                let size = &transformation
+                    * &Size::from((food.energy().unwrap() * 10., food.energy().unwrap() * 10.));
 
                 canvas
                     .fill_rect(Rect::from_center(

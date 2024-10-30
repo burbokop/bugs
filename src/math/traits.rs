@@ -1,4 +1,4 @@
-pub trait Sqr {
+pub(crate) trait Sqr {
     type Output;
     fn sqr(self) -> Self::Output;
 }
@@ -17,7 +17,7 @@ impl Sqr for f64 {
     }
 }
 
-pub trait Sqrt {
+pub(crate) trait Sqrt {
     type Output;
     fn sqrt(self) -> Self::Output;
 }
@@ -38,7 +38,7 @@ impl Sqrt for f64 {
     }
 }
 
-pub trait Atan2<Rhs = Self> {
+pub(crate) trait Atan2<Rhs = Self> {
     type Output;
     fn atan2(self, rhs: Rhs) -> Self::Output;
 }
@@ -59,7 +59,28 @@ impl Atan2 for f64 {
     }
 }
 
-pub trait Zero {
+pub(crate) trait Abs {
+    type Output;
+    fn abs(self) -> Self::Output;
+}
+
+impl Abs for f32 {
+    type Output = f32;
+
+    fn abs(self) -> Self::Output {
+        f32::abs(self)
+    }
+}
+
+impl Abs for f64 {
+    type Output = f64;
+
+    fn abs(self) -> Self::Output {
+        f64::abs(self)
+    }
+}
+
+pub(crate) trait Zero {
     fn zero() -> Self;
 }
 
@@ -75,7 +96,7 @@ impl Zero for f64 {
     }
 }
 
-pub trait One {
+pub(crate) trait One {
     fn one() -> Self;
 }
 
@@ -88,5 +109,21 @@ impl One for f32 {
 impl One for f64 {
     fn one() -> Self {
         1.
+    }
+}
+
+pub(crate) trait IsNeg {
+    fn is_neg(&self) -> bool;
+}
+
+impl IsNeg for f32 {
+    fn is_neg(&self) -> bool {
+        *self < 0.
+    }
+}
+
+impl IsNeg for f64 {
+    fn is_neg(&self) -> bool {
+        *self < 0.
     }
 }

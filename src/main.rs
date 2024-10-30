@@ -6,9 +6,9 @@ use environment::Environment;
 use math::Point;
 use render::{BrainRenderModel, Camera, EnvironmentRenderModel};
 use slint::{ComponentHandle, PlatformError, Timer, TimerMode};
-use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Instant;
+use std::{cell::RefCell, ops::Range};
 use utils::{color_to_slint_rgba_color, Float};
 
 mod brain;
@@ -23,7 +23,7 @@ slint::slint! {
     export { MainWindow, BugInfo } from "src/main.slint";
 }
 struct State {
-    environment: Environment,
+    environment: Environment<Range<f64>>,
     camera: Camera,
     environment_render_model: RefCell<EnvironmentRenderModel>,
     brain_render_model: RefCell<BrainRenderModel>,
@@ -45,7 +45,7 @@ pub fn main() -> Result<(), PlatformError> {
             0. ..(width as Float),
             0. ..(height as Float),
             0. ..1.,
-            10240,
+            512,
             (500., 500.).into(),
         ),
         selected_bug_id: None,
@@ -158,7 +158,6 @@ pub fn main() -> Result<(), PlatformError> {
         main_window.on_key_release_event(move |text| {
             let state = weak_state.upgrade().unwrap();
             let mut state = state.try_borrow_mut().unwrap();
-            println!("xxx: {}", text);
             if let Ok(lvl) = text.parse::<u32>() {
                 state.time_speed = (2_u32).pow(lvl) as f64;
                 true
@@ -236,13 +235,13 @@ pub fn main() -> Result<(), PlatformError> {
                                 .map(|x| *x as f32)
                                 .collect::<Vec<_>>()[..]
                                 .into(),
-                            age: bug.age(state.environment.now().clone()) as f32,
-                            baby_charge: bug.baby_charge() as f32,
+                            age: bug.age(state.environment.now().clone()).unwrap() as f32,
+                            baby_charge: bug.baby_charge().unwrap() as f32,
                             color: color_to_slint_rgba_color(bug.color()).into(),
-                            energy_level: bug.energy_level() as f32,
+                            energy_level: bug.energy_level().unwrap() as f32,
                             id: bug.id() as i32,
                             rotation: Angle::from_radians(bug.rotation()).d.value as f32,
-                            size: bug.size() as f32,
+                            size: bug.size().unwrap() as f32,
                             x: *bug.position().x() as f32,
                             y: *bug.position().y() as f32,
                         });
@@ -260,8 +259,8 @@ pub fn main() -> Result<(), PlatformError> {
 
                             window.set_selected_bug_last_brain_log(BugBrainLog {
                                 input: BugBrainInput {
-                                    age: brain_log.input.age as f32,
-                                    baby_charge: brain_log.input.baby_charge as f32,
+                                    age: brain_log.input.age.unwrap() as f32,
+                                    baby_charge: brain_log.input.baby_charge.unwrap() as f32,
                                     color_of_nearest_bug: color_to_slint_rgba_color(
                                         &brain_log.input.color_of_nearest_bug,
                                     )
@@ -274,12 +273,12 @@ pub fn main() -> Result<(), PlatformError> {
                                         .input
                                         .direction_to_nearest_food
                                         as f32,
-                                    energy_level: brain_log.input.energy_level as f32,
+                                    energy_level: brain_log.input.energy_level.unwrap() as f32,
                                     proximity_to_bug: brain_log.input.proximity_to_bug as f32,
                                     proximity_to_food: brain_log.input.proximity_to_food as f32,
                                 },
                                 output: BugBrainOutput {
-                                    baby_charging_rate: brain_log.output.baby_charging_rate as f32,
+                                    baby_charging_rate: brain_log.output.baby_charging_rate.unwrap() as f32,
                                     rotation_velocity: brain_log.output.rotation_velocity as f32,
                                     velocity: brain_log.output.velocity as f32,
                                 },

@@ -7,8 +7,8 @@ use std::{
 
 use chromosome::Chromosome;
 use complexible::complex_numbers::{Angle, ComplexNumber};
-use rand::Rng;
 use rand::RngCore;
+use rand::{distributions::uniform::SampleRange, Rng};
 
 pub const EAT_FOOD_MAX_PROXIMITY: Float = 20.;
 
@@ -16,12 +16,14 @@ use crate::{
     brain::{self, Brain, VerboseOutput},
     chromo_utils::ExtendedChromosome as _,
     environment::{Environment, EnvironmentRequest, Food},
-    utils::{Color, Float},
+    math::{noneg_float, AbsAsNoNeg as _, NoNeg},
+    utils::{self, Color, Float},
 };
 
 use crate::math::Point;
 
 static NEXT_BUG_ID: AtomicUsize = AtomicUsize::new(0);
+pub(crate) static BUG_ENERGY_CAPACITY: NoNeg<Float> = noneg_float(10.);
 
 pub(crate) struct BrainLog {
     pub input: brain::Input,
@@ -36,12 +38,12 @@ pub(crate) struct Bug {
     last_brain_log: Option<BrainLog>,
     position: Point<Float>,
     rotation: Float,
-    size: Float,
-    energy_level: Float,
+    size: NoNeg<Float>,
+    energy_level: NoNeg<Float>,
     birth_instant: Instant,
     max_age: Duration,
     color: Color,
-    baby_charge: Float,
+    baby_charge: NoNeg<Float>,
 }
 
 impl Bug {
@@ -69,20 +71,20 @@ impl Bug {
         self.position
     }
 
-    pub(crate) fn size(&self) -> Float {
+    pub(crate) fn size(&self) -> NoNeg<Float> {
         self.size
     }
 
-    pub(crate) fn energy_level(&self) -> Float {
+    pub(crate) fn energy_level(&self) -> NoNeg<Float> {
         self.energy_level
     }
 
-    pub(crate) fn baby_charge(&self) -> Float {
+    pub(crate) fn baby_charge(&self) -> NoNeg<Float> {
         self.baby_charge
     }
 
-    pub(crate) fn age(&self, now: Instant) -> Float {
-        (now - self.birth_instant).div_duration_f64(self.max_age)
+    pub(crate) fn age(&self, now: Instant) -> NoNeg<Float> {
+        NoNeg::wrap((now - self.birth_instant).div_duration_f64(self.max_age)).unwrap()
     }
 
     pub(crate) fn color(&self) -> &Color {
@@ -93,10 +95,12 @@ impl Bug {
         chromosome: Chromosome<Float>,
         position: Point<Float>,
         rotation: Float,
+        energy_level: NoNeg<Float>,
+        now: Instant,
     ) -> Self {
         let brain = Brain::new(&chromosome, 0..208);
         let body_genes = &chromosome.genes[208..256];
-        let max_age = Duration::from_secs_f64(body_genes[0] * 60. * 60.);
+        let max_age = Duration::from_secs_f64(body_genes[0].abs() * 60. * 60.);
         let color = Color {
             a: 1.,
             r: body_genes[1],
@@ -111,12 +115,12 @@ impl Bug {
             last_brain_log: None,
             position,
             rotation,
-            size: 1.,
-            energy_level: 1.,
-            birth_instant: Instant::now(),
+            size: noneg_float(1.),
+            energy_level,
+            birth_instant: now,
             max_age,
             color,
-            baby_charge: 0.,
+            baby_charge: noneg_float(0.),
         }
     }
 
@@ -138,12 +142,18 @@ impl Bug {
         (self.position - other.position()).angle()
     }
 
-    fn find_nearest_bug<'a>(&self, env: &'a Environment) -> Option<Ref<'a, Bug>> {
+    fn find_nearest_bug<'a, R: SampleRange<Float>>(
+        &self,
+        env: &'a Environment<R>,
+    ) -> Option<Ref<'a, Bug>> {
         env.bugs()
             .min_by(|a, b| self.dst_to_bug(a).partial_cmp(&self.dst_to_bug(b)).unwrap())
     }
 
-    fn find_nearest_food<'a>(&self, env: &'a Environment) -> Option<&'a Food> {
+    fn find_nearest_food<'a, R: SampleRange<Float>>(
+        &self,
+        env: &'a Environment<R>,
+    ) -> Option<&'a Food> {
         env.food().iter().min_by(|a, b| {
             self.dst_to_food(a)
                 .partial_cmp(&&self.dst_to_food(b))
@@ -151,11 +161,13 @@ impl Bug {
         })
     }
 
-    fn reproduce_asexually<R: RngCore>(&self, rng: &mut R) -> Bug {
+    fn reproduce_asexually<R: RngCore>(&self, rng: &mut R, now: Instant) -> Bug {
         Bug::give_birth(
-            self.chromosome.mutated_ext(|_| 0.01..1., 0.01, rng),
+            self.chromosome.mutated_ext(|_| 0.01..10., 0.01, rng),
             self.position,
             rng.gen_range(0. ..(PI * 2.)),
+            noneg_float(1.),
+            now,
         )
     }
 
@@ -164,20 +176,13 @@ impl Bug {
     }
 
     /// return true if food is completely drained
-    pub(crate) fn eat(&mut self, food: &mut Food, mut delta_energy: Float) -> bool {
-        let mut completely_drained: bool = false;
-        if food.energy() < delta_energy {
-            delta_energy = food.energy();
-            completely_drained = true;
-        }
-        food.set_energy(food.energy() - delta_energy);
-        self.energy_level += delta_energy;
-        completely_drained
+    pub(crate) fn eat(&mut self, food: &mut Food, delta_energy: NoNeg<Float>) -> bool {
+        utils::transfer_energy(food.energy_mut(), &mut self.energy_level, delta_energy, BUG_ENERGY_CAPACITY)
     }
 
-    pub(crate) fn proceed<R: RngCore>(
+    pub(crate) fn proceed<R: RngCore, Range: SampleRange<Float>>(
         &mut self,
-        env: &Environment,
+        env: &Environment<Range>,
         dt: Duration,
         rng: &mut R,
     ) -> Vec<EnvironmentRequest> {
@@ -245,7 +250,9 @@ impl Bug {
         {
             let delta_rotation = brain_output.rotation_velocity * 0.01 * dt.as_secs_f64();
             self.rotation = (self.rotation + delta_rotation) % (PI * 2.);
-            self.energy_level -= delta_rotation * 0.001;
+
+            let delta_energy = delta_rotation.abs_as_noneg() * noneg_float(0.001);
+            utils::drain_energy(&mut self.energy_level, delta_energy);
         }
 
         {
@@ -255,13 +262,17 @@ impl Bug {
                     &ComplexNumber::from_polar(delta_distance, Angle::from_radians(self.rotation)),
                 );
             self.position = (new_pos.real(), new_pos.imag()).into();
-            self.energy_level -= delta_distance * 0.001;
+
+            let delta_energy = delta_distance.abs_as_noneg() * noneg_float(0.001);
+            utils::drain_energy(&mut self.energy_level, delta_energy);
         }
 
         {
-            let delta_baby_charge = brain_output.baby_charging_rate * 0.01 * dt.as_secs_f64();
-            self.baby_charge += delta_baby_charge;
-            self.energy_level -= delta_baby_charge;
+            let delta_energy = brain_output.baby_charging_rate
+                * noneg_float(0.01)
+                * NoNeg::wrap(dt.as_secs_f64()).unwrap();
+
+            utils::transfer_energy(&mut self.energy_level, &mut self.baby_charge, delta_energy, noneg_float(1.));
         }
 
         let mut requests: Vec<EnvironmentRequest> = Default::default();
@@ -272,18 +283,20 @@ impl Bug {
                 requests.push(EnvironmentRequest::TransferEnergyFromFoodToBug {
                     food_id: nearest_food.id(),
                     bug_id: self.id,
-                    delta_energy: dt.as_secs_f64() * eat_rate,
+                    delta_energy: NoNeg::wrap(dt.as_secs_f64() * eat_rate).unwrap(),
                 });
             }
         }
 
-        if self.baby_charge >= 1. {
+        if self.baby_charge >= noneg_float(1.) {
             // give birth
-            requests.push(EnvironmentRequest::GiveBirth(self.reproduce_asexually(rng)));
-            self.baby_charge -= 1.;
+            requests.push(EnvironmentRequest::GiveBirth(
+                self.reproduce_asexually(rng, env.now().clone()),
+            ));
+            self.baby_charge = NoNeg::wrap(self.baby_charge - noneg_float(1.)).unwrap();
         }
 
-        if self.energy_level <= 0. || age > 1. {
+        if self.energy_level == noneg_float(0.) || age > noneg_float(1.) {
             requests.push(EnvironmentRequest::Kill { id: self.id });
         }
 

@@ -5,7 +5,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{bug::Bug, math::Point, utils::Float};
+use crate::{
+    bug::{Bug, BUG_ENERGY_CAPACITY},
+    math::{NoNeg, Point},
+    utils::Float,
+};
 use chromosome::Chromosome;
 use rand::Rng;
 use rand::{distributions::uniform::SampleRange, RngCore};
@@ -15,7 +19,7 @@ static NEXT_FOOD_ID: AtomicUsize = AtomicUsize::new(0);
 pub(crate) struct Food {
     id: usize,
     position: Point<Float>,
-    energy: Float,
+    energy: NoNeg<Float>,
 }
 
 impl Food {
@@ -27,11 +31,15 @@ impl Food {
         self.position
     }
 
-    pub(crate) fn energy(&self) -> Float {
+    pub(crate) fn energy(&self) -> NoNeg<Float> {
         self.energy
     }
 
-    pub(crate) fn set_energy(&mut self, e: Float) {
+    pub(crate) fn energy_mut(&mut self) -> &mut NoNeg<Float> {
+        &mut self.energy
+    }
+
+    pub(crate) fn set_energy(&mut self, e: NoNeg<Float>) {
         self.energy = e
     }
 
@@ -44,7 +52,7 @@ impl Food {
         Food {
             id: NEXT_FOOD_ID.fetch_add(1, Ordering::SeqCst),
             position: (rng.gen_range(x_range), rng.gen_range(y_range)).into(),
-            energy: rng.gen_range(e_range),
+            energy: NoNeg::wrap(rng.gen_range(e_range)).unwrap(),
         }
     }
 
@@ -69,41 +77,65 @@ pub(crate) enum EnvironmentRequest {
     TransferEnergyFromFoodToBug {
         food_id: usize,
         bug_id: usize,
-        delta_energy: Float,
+        delta_energy: NoNeg<Float>,
     },
 }
 
-pub(crate) struct Environment {
+pub(crate) struct Environment<R: SampleRange<Float>> {
     food: Vec<Food>,
     bugs: Vec<RefCell<Bug>>,
     now: Instant,
+    x_range: R,
+    y_range: R,
+    food_e_range: R,
+    last_food_creation_instant: Instant,
 }
 
-impl Environment {
-    pub fn new<R: RngCore, RR: SampleRange<Float> + Clone>(
+impl<Range: SampleRange<Float>> Environment<Range> {
+    pub fn new<R: RngCore>(
         rng: &mut R,
-        x_range: RR,
-        y_range: RR,
-        food_e_range: RR,
+        x_range: Range,
+        y_range: Range,
+        food_e_range: Range,
         food_count: usize,
         bug_position: Point<Float>,
-    ) -> Self {
+    ) -> Self
+    where
+        Range: Clone,
+    {
+        let now = Instant::now();
         Self {
             food: Food::generate_vec(
                 rng,
                 x_range.clone(),
                 y_range.clone(),
-                food_e_range,
+                food_e_range.clone(),
                 food_count,
             ),
             bugs: vec![RefCell::new(Bug::give_birth(
                 Chromosome {
-                    genes: (0..256).map(|_| 1.).collect(),
+                    genes: (0..256)
+                        .map(|i| {
+                            if i == 0 || i == 128 || i == 128 + 8 + 8 {
+                                1.
+                            } else if (0..208).contains(&i) {
+                                0.
+                            } else {
+                                1.
+                            }
+                        })
+                        .collect(),
                 },
                 bug_position,
                 rng.gen_range(0. ..PI),
+                BUG_ENERGY_CAPACITY,
+                now,
             ))],
-            now: Instant::now(),
+            now,
+            x_range,
+            y_range,
+            food_e_range,
+            last_food_creation_instant: now,
         }
     }
 
@@ -111,8 +143,22 @@ impl Environment {
         &self.now
     }
 
-    pub(crate) fn proceed<R: RngCore>(&mut self, dt: Duration, rng: &mut R) {
+    pub(crate) fn proceed<R: RngCore>(&mut self, dt: Duration, rng: &mut R)
+    where
+        Range: Clone,
+    {
         self.now += dt;
+
+        if self.now - self.last_food_creation_instant > Duration::from_millis(10) {
+            self.food.push(Food::generate(
+                rng,
+                self.x_range.clone(),
+                self.y_range.clone(),
+                self.food_e_range.clone(),
+            ));
+            self.last_food_creation_instant = self.now;
+        }
+
         let mut requests: Vec<EnvironmentRequest> = Default::default();
         for b in &self.bugs {
             requests.append(&mut b.borrow_mut().proceed(&self, dt, rng));
@@ -145,7 +191,7 @@ impl Environment {
         &mut self,
         food_id: usize,
         bug_id: usize,
-        delta_energy: f64,
+        delta_energy: NoNeg<Float>,
     ) {
         if let Some(bug_index) = self.bugs.iter().position(|b| b.borrow().id() == bug_id) {
             if let Some(food_index) = self.food.iter().position(|b| b.id() == food_id) {

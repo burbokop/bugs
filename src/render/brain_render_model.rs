@@ -88,10 +88,12 @@ fn draw_connections<const INPUT_SIZE: usize, const OUTPUT_SIZE: usize>(
         .map(|p| p.weights().iter())
         .flatten()
         .cloned()
-        .reduce(Float::max)
-        .unwrap();
+        .reduce(|a, b| a.abs().max(b.abs()))
+        .unwrap()
+        .abs();
 
-    let node_color = Color::RGB(165, 136, 171);
+    let connection_color = Color::RGB(165, 136, 171);
+    let negative_connection_color = Color::RGB(227, 10, 125);
     let text_color = Color::RGB(47, 72, 88);
     let bias_text_color = Color::RGB(249, 248, 113);
 
@@ -118,21 +120,56 @@ fn draw_connections<const INPUT_SIZE: usize, const OUTPUT_SIZE: usize>(
                     point0.1 as i16,
                     point1.0 as i16,
                     point1.1 as i16,
-                    Color::RGBA(
-                        node_color.r,
-                        node_color.g,
-                        node_color.b,
-                        (w / max_weight * 255.) as u8,
-                    ),
+                    if w >= 0. {
+                        Color::RGBA(
+                            connection_color.r,
+                            connection_color.g,
+                            connection_color.b,
+                            (w.abs() / max_weight * 255.) as u8,
+                        )
+                    } else {
+                        Color::RGBA(
+                            negative_connection_color.r,
+                            negative_connection_color.g,
+                            negative_connection_color.b,
+                            (w.abs() / max_weight * 255.) as u8,
+                        )
+                    },
                 )
                 .unwrap();
 
+            if selected_node.is_some() {
+                let center = (Point::from(point0) + Point::from(point1)) / 2;
+
+                let texture_creator = canvas.texture_creator();
+                let surface = font
+                    .render(&format!("{:.2}", w))
+                    .blended(text_color)
+                    .map_err(|e| e.to_string())
+                    .unwrap();
+                let texture = texture_creator
+                    .create_texture_from_surface(&surface)
+                    .map_err(|e| e.to_string())
+                    .unwrap();
+
+                let TextureQuery { width, height, .. } = texture.query();
+                canvas
+                    .copy(&texture, None, Rect::from_center(center, width, height))
+                    .unwrap();
+            }
+        }
+
+        if selected_node.is_some() {
+            let off_i = (max_width - INPUT_SIZE) / 2;
+            let off_j = (max_width - OUTPUT_SIZE) / 2;
+            let point0 = (x0, (40 + 40 * (off_i + INPUT_SIZE)) as i32);
+            let point1 = (x1, (40 + 40 * (off_j + j)) as i32);
             let center = (Point::from(point0) + Point::from(point1)) / 2;
 
             let texture_creator = canvas.texture_creator();
             let surface = font
-                .render(&format!("{:.2}", w))
-                .blended(text_color)
+                .render(&format!("{:.2}", layer.perceptrons()[j].bias()))
+                .blended(bias_text_color)
                 .map_err(|e| e.to_string())
                 .unwrap();
             let texture = texture_creator
@@ -145,28 +182,6 @@ fn draw_connections<const INPUT_SIZE: usize, const OUTPUT_SIZE: usize>(
                 .copy(&texture, None, Rect::from_center(center, width, height))
                 .unwrap();
         }
-
-        let off_i = (max_width - INPUT_SIZE) / 2;
-        let off_j = (max_width - OUTPUT_SIZE) / 2;
-        let point0 = (x0, (40 + 40 * (off_i + INPUT_SIZE)) as i32);
-        let point1 = (x1, (40 + 40 * (off_j + j)) as i32);
-        let center = (Point::from(point0) + Point::from(point1)) / 2;
-
-        let texture_creator = canvas.texture_creator();
-        let surface = font
-            .render(&format!("{:.2}", layer.perceptrons()[j].bias()))
-            .blended(bias_text_color)
-            .map_err(|e| e.to_string())
-            .unwrap();
-        let texture = texture_creator
-            .create_texture_from_surface(&surface)
-            .map_err(|e| e.to_string())
-            .unwrap();
-
-        let TextureQuery { width, height, .. } = texture.query();
-        canvas
-            .copy(&texture, None, Rect::from_center(center, width, height))
-            .unwrap();
     }
 }
 

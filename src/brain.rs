@@ -1,4 +1,8 @@
-use crate::utils::{Color, Float};
+use crate::{
+    bug::BUG_ENERGY_CAPACITY,
+    math::{map_into_range, NoNeg},
+    utils::{self, Color, Float},
+};
 use chromosome::Chromosome;
 use core::range::Range;
 use simple_neural_net::{normalizers, Arr, Layer as _, PerceptronLayer};
@@ -11,14 +15,14 @@ pub(crate) struct Brain {
 
 #[derive(Debug, Clone)]
 pub(crate) struct Input {
-    pub(crate) energy_level: Float,
+    pub(crate) energy_level: NoNeg<Float>,
     pub(crate) proximity_to_food: Float,
     pub(crate) direction_to_nearest_food: Float,
-    pub(crate) age: Float,
+    pub(crate) age: NoNeg<Float>,
     pub(crate) proximity_to_bug: Float,
     pub(crate) direction_to_nearest_bug: Float,
     pub(crate) color_of_nearest_bug: Color,
-    pub(crate) baby_charge: Float,
+    pub(crate) baby_charge: NoNeg<Float>,
 }
 
 #[derive(Debug, Clone)]
@@ -28,7 +32,7 @@ pub(crate) struct Output {
     /// radians per second
     pub(crate) rotation_velocity: Float,
     /// energy per second
-    pub(crate) baby_charging_rate: Float,
+    pub(crate) baby_charging_rate: NoNeg<Float>,
 }
 
 pub(crate) struct VerboseOutput {
@@ -38,24 +42,24 @@ pub(crate) struct VerboseOutput {
 
 impl From<Input> for [Float; 16] {
     fn from(value: Input) -> Self {
-        [
-            value.energy_level,
-            value.proximity_to_food,
+        utils::normalize([
+            (value.energy_level / BUG_ENERGY_CAPACITY).unwrap(),
+            normalizers::sigmoid(value.proximity_to_food / 100.),
             value.direction_to_nearest_food,
-            value.age,
-            value.proximity_to_bug,
+            value.age.unwrap(),
+            normalizers::sigmoid(value.proximity_to_bug / 100.),
             value.direction_to_nearest_bug,
             value.color_of_nearest_bug.a,
             value.color_of_nearest_bug.r,
             value.color_of_nearest_bug.g,
             value.color_of_nearest_bug.b,
-            value.baby_charge,
+            value.baby_charge.unwrap(),
             0.,
             0.,
             0.,
             0.,
             0.,
-        ]
+        ])
     }
 }
 
@@ -64,7 +68,7 @@ impl From<Arr<Float, 8>> for Output {
         Self {
             velocity: value[0],
             rotation_velocity: value[1],
-            baby_charging_rate: value[2],
+            baby_charging_rate: NoNeg::wrap(map_into_range(value[2], -1. ..1., 0. ..1.)).unwrap(),
         }
     }
 }
@@ -124,7 +128,9 @@ impl Brain {
 
     pub(crate) fn proceed_verbosely(&self, input: Input) -> VerboseOutput {
         let i = input.into();
-        let (r0, r1) = self.net.proceed_verbosely(&i, normalizers::sigmoid);
+        let (r0, r1) = self
+            .net
+            .proceed_verbosely(&i, |x| normalizers::sigmoid(x) * 2. - 1.);
         VerboseOutput {
             output: r1.clone().into(),
             activations: (i, *r0, *r1),
