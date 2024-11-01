@@ -88,11 +88,11 @@ pub(crate) struct DeltaAngle<T> {
 }
 
 impl<T> DeltaAngle<T> {
-    pub(crate) fn fron_radians(value: T) -> Self {
+    pub(crate) fn from_radians(value: T) -> Self {
         Self { value }
     }
 
-    pub(crate) fn fron_degrees(value: T) -> Self {
+    pub(crate) fn from_degrees(value: T) -> Self {
         todo!()
     }
 
@@ -134,6 +134,19 @@ where
 {
     fn add_assign(&mut self, rhs: DeltaAngle<U>) {
         self.value += rhs.value
+    }
+}
+
+impl<T, U> Add<DeltaAngle<U>> for Angle<T>
+where
+    T: Add<U>,
+{
+    type Output = Angle<<T as Add<U>>::Output>;
+
+    fn add(self, rhs: DeltaAngle<U>) -> Self::Output {
+        Self::Output {
+            value: self.value + rhs.value,
+        }
     }
 }
 

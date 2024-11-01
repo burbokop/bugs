@@ -1,11 +1,13 @@
+use std::f64::consts::PI;
+
 use super::Camera;
 use crate::{
     bug,
     environment::Environment,
-    math::{Complex, Rect, Size},
+    math::{Angle, Complex, DeltaAngle, Rect, Size},
     utils::{color_to_sdl2_rgba_color, Float},
 };
-use complexible::complex_numbers::{Angle, ComplexNumber};
+
 use sdl2::{gfx::primitives::DrawRenderer as _, pixels::Color, surface::Surface};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 
@@ -105,8 +107,8 @@ impl EnvironmentRenderModel {
                 let position = &transformation * &bug.position();
 
                 let rotation =
-                    ComplexNumber::from_polar(1., Angle::from_radians(bug.rotation().radians()));
-                let pos = ComplexNumber::from_cartesian(*position.x(), *position.y());
+                complexible::complex_numbers::ComplexNumber::from_polar(1., complexible::complex_numbers::Angle::from_radians(bug.rotation().radians()));
+                let pos = complexible::complex_numbers::ComplexNumber::from_cartesian(*position.x(), *position.y());
 
                 let scale = Float::max(*transformation.scale_x(), *transformation.scale_y());
                 let radius = bug::EAT_FOOD_MAX_PROXIMITY.unwrap() * scale * bug.size().unwrap();
@@ -116,9 +118,9 @@ impl EnvironmentRenderModel {
                 let aabb = Rect::from_center(position, (radius * 2., radius * 2.).into());
 
                 if view_port_rect.contains(&aabb) || view_port_rect.instersects(&aabb) {
-                    let p0 = ComplexNumber::from_cartesian(4. * size, 0. * size);
-                    let p1 = ComplexNumber::from_cartesian(-1. * size, -1. * size);
-                    let p2 = ComplexNumber::from_cartesian(-1. * size, 1. * size);
+                    let p0 = complexible::complex_numbers::ComplexNumber::from_cartesian(4. * size, 0. * size);
+                    let p1 = complexible::complex_numbers::ComplexNumber::from_cartesian(-1. * size, -1. * size);
+                    let p2 = complexible::complex_numbers::ComplexNumber::from_cartesian(-1. * size, 1. * size);
 
                     let pp0 = p0.mul(&rotation).add(&pos);
                     let pp1 = p1.mul(&rotation).add(&pos);
@@ -150,7 +152,12 @@ impl EnvironmentRenderModel {
 
                     if &Some(bug.id()) == selected_bug_id {
                         if let Some(log) = bug.last_brain_log() {
-                            let rl = Complex::from_polar(radius, log.output.desired_rotation);
+                            let rl = Complex::from_polar(
+                                radius,
+                                bug.rotation()
+                                + log.output.relative_desired_rotation
+                                + DeltaAngle::from_radians(if log.output.velocity > 0. {0.} else {PI}),
+                            );
                             canvas
                                 .line(
                                     *position.x() as i16,

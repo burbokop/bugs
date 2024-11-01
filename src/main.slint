@@ -37,6 +37,8 @@ export struct BugInfo  {
     color: color,
     baby-charge-level: float,
     baby-charge-capacity: float,
+    heat-level: float,
+    heat-capacity: float,
 }
 
 export struct EnvInfo {
@@ -44,6 +46,8 @@ export struct EnvInfo {
     now: duration,
     time-speed: float,
     pause: bool,
+    bugs-count: int,
+    food-count: int,
 }
 
 component Empty {}
@@ -59,6 +63,7 @@ export component MainWindow inherits Window {
     in property <image> brain-canvas <=> brain-canvas.source;
 
     in property <float> fps;
+    in property <float> tps;
     in property <EnvInfo> env-info;
     in property <BugInfo> selected-bug-info;
     in property <BugBrainLog> selected-bug-last-brain-log;
@@ -101,7 +106,7 @@ export component MainWindow inherits Window {
 
             Text {
                 font-size: 14px;
-                text: "time speed: \{(root.env-info.now/1s).round()}s";
+                text: "time since start: \{(root.env-info.now/1s).round()}s";
             }
 
             Text {
@@ -115,6 +120,16 @@ export component MainWindow inherits Window {
             }
 
             Text {
+                font-size: 14px;
+                text: "bugs count: \{root.env-info.bugs-count}";
+            }
+
+            Text {
+                font-size: 14px;
+                text: "food count: \{root.env-info.food-count}";
+            }
+
+            Text {
                 font-size: 20px;
                 text: "Selected bug:";
             }
@@ -123,34 +138,46 @@ export component MainWindow inherits Window {
                 font-size: 14px;
                 text: "id: " + root.selected-bug-info.id;
             }
+
             Text {
                 font-size: 14px;
                 text: "position: { \{(root.selected-bug-info.x * 10).round() / 10}, \{(root.selected-bug-info.y * 10).round() / 10} }";
             }
+
             Text {
                 font-size: 14px;
                 text: "rotation: " + (root.selected-bug-info.rotation / 1deg).round() + "°";
             }
+
             Text {
                 font-size: 14px;
                 text: "size: " + root.selected-bug-info.size;
             }
+
             Text {
                 font-size: 14px;
                 text: "energy-level: \{(root.selected-bug-info.energy-level * 100).round() / 100} / \{(root.selected-bug-info.energy-capacity * 100).round() / 100}";
             }
+
             Text {
                 font-size: 14px;
                 text: "age: " + (root.selected-bug-info.age / 1% * 10000).round() / 100 + "%";
             }
+
             Text {
                 font-size: 14px;
                 color: root.selected-bug-info.color;
                 text: "color: \{Utils.color-to-string(root.selected-bug-info.color)}";
             }
+
             Text {
                 font-size: 14px;
                 text: "baby-charge: \{(root.selected-bug-info.baby-charge-level * 100).round() / 100} / \{(root.selected-bug-info.baby-charge-capacity * 100).round() / 100}";
+            }
+
+            Text {
+                font-size: 14px;
+                text: "heat: \{(root.selected-bug-info.heat-level * 100).round() / 100} / \{(root.selected-bug-info.heat-capacity * 100).round() / 100}";
             }
 
             Text {
@@ -289,15 +316,23 @@ export component MainWindow inherits Window {
                 mouse-cursor: self.pressed ? MouseCursor.grabbing : MouseCursor.grab;
             }
 
-            Text {
+            VerticalBox {
                 x: 0;
                 y: 0;
-                text: "fps: \{(root.fps * 10).round() / 10}";
+                Text {
+                    text: "fps: \{(root.fps * 10).round() / 10}";
+                }
+
+                Text {
+                    text: "tps: \{(root.tps * 10).round() / 10}";
+                }
+
+                Empty {}
             }
         }
 
         brain-canvas := Image {
-            width: 300px;
+            width: 320px;
         }
     }
 

@@ -23,6 +23,7 @@ use crate::math::Point;
 
 static NEXT_BUG_ID: AtomicUsize = AtomicUsize::new(0);
 static BUG_ENERGY_CAPACITY_PER_SIZE: NoNeg<Float> = noneg_float(100.);
+static BUG_HEAT_CAPACITY_PER_SIZE: NoNeg<Float> = noneg_float(1000.);
 
 pub(crate) struct BrainLog {
     pub input: brain::Input,
@@ -43,6 +44,7 @@ pub(crate) struct Bug {
     max_age: Duration,
     color: Color,
     baby_charge_level: NoNeg<Float>,
+    heat_level: NoNeg<Float>,
 }
 
 impl Bug {
@@ -98,6 +100,14 @@ impl Bug {
         self.size.clone()
     }
 
+    pub(crate) fn heat_level(&self) -> NoNeg<Float> {
+        self.heat_level
+    }
+
+    pub(crate) fn heat_capacity(&self) -> NoNeg<Float> {
+        self.size * BUG_HEAT_CAPACITY_PER_SIZE
+    }
+
     pub(crate) fn give_birth(
         chromosome: Chromosome<Float>,
         position: Point<Float>,
@@ -107,7 +117,8 @@ impl Bug {
     ) -> Self {
         let brain = Brain::new(&chromosome, 0..208);
         let body_genes = &chromosome.genes[208..256];
-        let max_age = Duration::from_secs_f64(body_genes[0].abs() * 60. * 60. * 60.);
+        let max_age =
+            Duration::from_secs_f64(body_genes[0].abs() * body_genes[1].abs() * 60. * 60. * 24.);
         let size = body_genes[1].abs_as_noneg();
         let color = Color {
             a: 1.,
@@ -129,6 +140,7 @@ impl Bug {
             max_age,
             color,
             baby_charge_level: noneg_float(0.),
+            heat_level: noneg_float(0.),
         }
     }
 
@@ -259,13 +271,12 @@ impl Bug {
         });
 
         {
-            let raw_delta = brain_output
-                .desired_rotation
+            let raw_delta = (self.rotation + brain_output.relative_desired_rotation)
                 .signed_distance(self.rotation)
                 .radians();
 
             if raw_delta.abs() > 0.001 {
-                let delta_rotation = DeltaAngle::fron_radians(
+                let delta_rotation = DeltaAngle::from_radians(
                     sign(raw_delta)
                         * raw_delta
                             .abs()
@@ -304,6 +315,19 @@ impl Bug {
                 &mut self.baby_charge_level,
                 delta_energy,
                 baby_charge_capacity,
+            );
+        }
+
+        /* heat generation */
+        {
+            let heat_capacity = self.heat_capacity();
+            let delta_energy =
+                noneg_float(0.001) * self.size() * NoNeg::wrap(dt.as_secs_f64()).unwrap();
+            utils::transfer_energy(
+                &mut self.energy_level,
+                &mut self.heat_level,
+                delta_energy,
+                heat_capacity,
             );
         }
 

@@ -260,6 +260,10 @@ impl Environment {
         &self.food_sources
     }
 
+    pub(crate) fn bugs_count(&self) -> usize {
+        self.bugs.len()
+    }
+
     pub(crate) fn bugs<'a>(&'a self) -> impl Iterator<Item = Ref<'a, Bug>> {
         self.bugs.iter().filter_map(|x| x.try_borrow().ok())
     }

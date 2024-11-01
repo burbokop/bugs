@@ -21,8 +21,12 @@ fn delta_angle_to_activation(a: DeltaAngle<Float>) -> Float {
     math::fit_into_range(a.radians(), (-PI * 2.)..PI * 2., -1. ..1.).unwrap()
 }
 
+fn activation_to_delta_angle(a: Float) -> DeltaAngle<Float> {
+    DeltaAngle::from_radians(math::fit_into_range_inclusive(a.abs(), -1. ..=1., -PI..=PI).unwrap())
+}
+
 fn activation_to_noneg_delta_angle(a: Float) -> DeltaAngle<NoNeg<Float>> {
-    DeltaAngle::fron_radians(
+    DeltaAngle::from_radians(
         NoNeg::wrap(math::fit_into_range_inclusive(a.abs(), 0. ..=1., 0. ..=PI * 2.).unwrap())
             .unwrap(),
     )
@@ -51,7 +55,8 @@ pub(crate) struct Input {
 pub(crate) struct Output {
     /// in pixels per second
     pub(crate) velocity: Float,
-    pub(crate) desired_rotation: Angle<Float>,
+    /// rotaion relative to self rotation
+    pub(crate) relative_desired_rotation: DeltaAngle<Float>,
     /// per second
     pub(crate) rotation_velocity: DeltaAngle<NoNeg<Float>>,
     /// energy per second
@@ -67,7 +72,6 @@ impl From<Input> for [Float; 16] {
     fn from(value: Input) -> Self {
         utils::normalize([
             (value.energy_level / value.energy_capacity).unwrap(),
-            angle_to_activation(value.rotation),
             normalizers::sigmoid(value.proximity_to_food / 100.),
             delta_angle_to_activation(
                 value
@@ -90,6 +94,7 @@ impl From<Input> for [Float; 16] {
             0.,
             0.,
             0.,
+            0.,
         ])
     }
 }
@@ -98,7 +103,7 @@ impl From<Arr<Float, 8>> for Output {
     fn from(value: Arr<Float, 8>) -> Self {
         Self {
             velocity: value[0] * 10.,
-            desired_rotation: activation_to_angle(value[1]),
+            relative_desired_rotation: activation_to_delta_angle(value[1]),
             rotation_velocity: activation_to_noneg_delta_angle(value[2]),
             baby_charging_rate: NoNeg::wrap(
                 math::fit_into_range_inclusive(value[3].abs(), 0. ..=1., 0. ..=10.).unwrap(),

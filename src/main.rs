@@ -30,6 +30,7 @@ struct State {
     time_speed: Float,
     pause: bool,
     selected_node: Option<(usize, usize)>,
+    tps: Float,
 }
 
 pub fn main() -> Result<(), PlatformError> {
@@ -83,6 +84,7 @@ pub fn main() -> Result<(), PlatformError> {
         time_speed: 1.,
         pause: true,
         selected_node: None,
+        tps: 0.,
     }));
 
     let timer = Timer::default();
@@ -102,6 +104,9 @@ pub fn main() -> Result<(), PlatformError> {
                 if !state.pause {
                     let time_speed = state.time_speed;
                     state.environment.proceed(dt.mul_f64(time_speed), &mut rng);
+                    state.tps = 1. / dt.as_secs_f64();
+                } else {
+                    state.tps = 0.;
                 }
             },
         );
@@ -234,127 +239,132 @@ pub fn main() -> Result<(), PlatformError> {
     let render_timer = Timer::default();
 
     {
+        #[cfg(not(debug_assertions))]
+        let render_interval = Duration::from_millis(1000 / 30);
+        #[cfg(debug_assertions)]
+        let render_interval = Duration::from_millis(2000);
+
         let weak_state = Rc::downgrade(&state);
         let weak_window = main_window.as_weak();
-        render_timer.start(
-            TimerMode::Repeated,
-            std::time::Duration::from_millis(1000 / 30),
-            move || {
-                if let Some(window) = weak_window.upgrade() {
-                    let now = Instant::now();
-                    let dt = now - prev_render_instant;
-                    prev_render_instant = now;
+        render_timer.start(TimerMode::Repeated, render_interval, move || {
+            if let Some(window) = weak_window.upgrade() {
+                let now = Instant::now();
+                let dt = now - prev_render_instant;
+                prev_render_instant = now;
 
-                    let state = weak_state.upgrade().unwrap();
-                    let state = state.borrow();
+                let state = weak_state.upgrade().unwrap();
+                let state = state.borrow();
 
-                    let mut environment_render_model = state.environment_render_model.borrow_mut();
+                let mut environment_render_model = state.environment_render_model.borrow_mut();
 
-                    let texture = environment_render_model.render(
-                        &state.environment,
-                        &state.camera,
-                        &state.selected_bug_id,
-                        window.get_requested_env_canvas_width() as u32,
-                        window.get_requested_env_canvas_height() as u32,
-                    );
-                    window.set_env_canvas(texture);
-                    window.set_env_info(EnvInfo {
-                        now: state
-                            .environment
-                            .now()
-                            .duration_since(state.environment.creation_time().clone())
-                            .as_millis() as i64,
-                        pause: state.pause,
-                        time_speed: state.time_speed as f32,
+                let texture = environment_render_model.render(
+                    &state.environment,
+                    &state.camera,
+                    &state.selected_bug_id,
+                    window.get_requested_env_canvas_width() as u32,
+                    window.get_requested_env_canvas_height() as u32,
+                );
+                window.set_env_canvas(texture);
+                window.set_env_info(EnvInfo {
+                    now: state
+                        .environment
+                        .now()
+                        .duration_since(state.environment.creation_time().clone())
+                        .as_millis() as i64,
+                    pause: state.pause,
+                    time_speed: state.time_speed as f32,
+                    bugs_count: state.environment.bugs_count() as i32,
+                    food_count: state.environment.food().len() as i32,
+                });
+                window.set_fps(1. / dt.as_secs_f32());
+                window.set_tps(state.tps as f32);
+
+                if let Some(bug) = state
+                    .selected_bug_id
+                    .and_then(|id| state.environment.find_bug_by_id(id))
+                {
+                    window.set_selected_bug_info(BugInfo {
+                        genes: bug
+                            .chromosome()
+                            .genes
+                            .iter()
+                            .map(|x| *x as f32)
+                            .collect::<Vec<_>>()[..]
+                            .into(),
+                        age: bug.age(state.environment.now().clone()).unwrap() as f32,
+                        baby_charge_level: bug.baby_charge_level().unwrap() as f32,
+                        baby_charge_capacity: bug.baby_charge_capacity().unwrap() as f32,
+                        color: color_to_slint_rgba_color(bug.color()).into(),
+                        energy_level: bug.energy_level().unwrap() as f32,
+                        energy_capacity: bug.energy_capacity().unwrap() as f32,
+                        id: bug.id() as i32,
+                        rotation: bug.rotation().degrees() as f32,
+                        size: bug.size().unwrap() as f32,
+                        x: *bug.position().x() as f32,
+                        y: *bug.position().y() as f32,
+                        heat_capacity: bug.heat_capacity().unwrap() as f32,
+                        heat_level: bug.heat_level().unwrap() as f32,
                     });
-                    window.set_fps(1. / dt.as_secs_f32());
 
-                    if let Some(bug) = state
-                        .selected_bug_id
-                        .and_then(|id| state.environment.find_bug_by_id(id))
-                    {
-                        window.set_selected_bug_info(BugInfo {
-                            genes: bug
-                                .chromosome()
-                                .genes
-                                .iter()
-                                .map(|x| *x as f32)
-                                .collect::<Vec<_>>()[..]
+                    if let Some(brain_log) = bug.last_brain_log() {
+                        let mut brain_render_model = state.brain_render_model.borrow_mut();
+
+                        window.set_brain_canvas(brain_render_model.render(
+                            bug.brain(),
+                            brain_log,
+                            state.selected_node,
+                            window.get_requested_brain_canvas_width() as u32,
+                            window.get_requested_brain_canvas_height() as u32,
+                        ));
+
+                        window.set_selected_bug_last_brain_log(BugBrainLog {
+                            input: BugBrainInput {
+                                age: brain_log.input.age.unwrap() as f32,
+                                relative_baby_charge: (brain_log.input.baby_charge_level.unwrap()
+                                    / brain_log.input.baby_charge_capacity.unwrap())
+                                    as f32,
+                                color_of_nearest_bug: color_to_slint_rgba_color(
+                                    &brain_log.input.color_of_nearest_bug,
+                                )
                                 .into(),
-                            age: bug.age(state.environment.now().clone()).unwrap() as f32,
-                            baby_charge_level: bug.baby_charge_level().unwrap() as f32,
-                            baby_charge_capacity: bug.baby_charge_capacity().unwrap() as f32,
-                            color: color_to_slint_rgba_color(bug.color()).into(),
-                            energy_level: bug.energy_level().unwrap() as f32,
-                            energy_capacity: bug.energy_capacity().unwrap() as f32,
-                            id: bug.id() as i32,
-                            rotation: bug.rotation().degrees() as f32,
-                            size: bug.size().unwrap() as f32,
-                            x: *bug.position().x() as f32,
-                            y: *bug.position().y() as f32,
+                                direction_to_nearest_bug: brain_log
+                                    .input
+                                    .direction_to_nearest_bug
+                                    .degrees()
+                                    as f32,
+                                direction_to_nearest_food: brain_log
+                                    .input
+                                    .direction_to_nearest_food
+                                    .degrees()
+                                    as f32,
+                                relative_energy: (brain_log.input.energy_level.unwrap()
+                                    / brain_log.input.energy_capacity.unwrap())
+                                    as f32,
+                                rotation: brain_log.input.rotation.degrees() as f32,
+                                proximity_to_bug: brain_log.input.proximity_to_bug as f32,
+                                proximity_to_food: brain_log.input.proximity_to_food as f32,
+                            },
+                            output: BugBrainOutput {
+                                baby_charging_rate: brain_log.output.baby_charging_rate.unwrap()
+                                    as f32,
+                                desired_rotation: (bug.rotation()
+                                    + brain_log.output.relative_desired_rotation)
+                                    .degrees()
+                                    as f32,
+                                rotation_velocity: brain_log
+                                    .output
+                                    .rotation_velocity
+                                    .unwrap_degrees()
+                                    as f32,
+                                velocity: brain_log.output.velocity as f32,
+                            },
                         });
-
-                        if let Some(brain_log) = bug.last_brain_log() {
-                            let mut brain_render_model = state.brain_render_model.borrow_mut();
-
-                            window.set_brain_canvas(brain_render_model.render(
-                                bug.brain(),
-                                brain_log,
-                                state.selected_node,
-                                window.get_requested_brain_canvas_width() as u32,
-                                window.get_requested_brain_canvas_height() as u32,
-                            ));
-
-                            window.set_selected_bug_last_brain_log(BugBrainLog {
-                                input: BugBrainInput {
-                                    age: brain_log.input.age.unwrap() as f32,
-                                    relative_baby_charge: (brain_log
-                                        .input
-                                        .baby_charge_level
-                                        .unwrap()
-                                        / brain_log.input.baby_charge_capacity.unwrap())
-                                        as f32,
-                                    color_of_nearest_bug: color_to_slint_rgba_color(
-                                        &brain_log.input.color_of_nearest_bug,
-                                    )
-                                    .into(),
-                                    direction_to_nearest_bug: brain_log
-                                        .input
-                                        .direction_to_nearest_bug
-                                        .degrees()
-                                        as f32,
-                                    direction_to_nearest_food: brain_log
-                                        .input
-                                        .direction_to_nearest_food
-                                        .degrees()
-                                        as f32,
-                                    relative_energy: (brain_log.input.energy_level.unwrap()
-                                        / brain_log.input.energy_capacity.unwrap())
-                                        as f32,
-                                    rotation: brain_log.input.rotation.degrees() as f32,
-                                    proximity_to_bug: brain_log.input.proximity_to_bug as f32,
-                                    proximity_to_food: brain_log.input.proximity_to_food as f32,
-                                },
-                                output: BugBrainOutput {
-                                    baby_charging_rate: brain_log.output.baby_charging_rate.unwrap()
-                                        as f32,
-                                    desired_rotation: brain_log.output.desired_rotation.degrees()
-                                        as f32,
-                                    rotation_velocity: brain_log
-                                        .output
-                                        .rotation_velocity
-                                        .unwrap_degrees()
-                                        as f32,
-                                    velocity: brain_log.output.velocity as f32,
-                                },
-                            });
-                        }
                     }
-
-                    window.window().request_redraw();
                 }
-            },
-        );
+
+                window.window().request_redraw();
+            }
+        });
     }
 
     main_window.run()

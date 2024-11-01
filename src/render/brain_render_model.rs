@@ -43,20 +43,70 @@ fn draw_layer_activations<const SIZE: usize>(
 
         let node_color = Color::RGB(165, 136, 171);
         let text_color = Color::RGB(47, 72, 88);
+        let node_radius = 16.;
 
         if selected {
             canvas
-                .filled_circle(point.0 as i16, point.1 as i16, 10, node_color)
+                .filled_circle(point.0 as i16, point.1 as i16, node_radius as i16, node_color)
                 .unwrap();
         } else {
             canvas
-                .circle(point.0 as i16, point.1 as i16, 10, node_color)
+                .circle(point.0 as i16, point.1 as i16, node_radius as i16, node_color)
                 .unwrap();
         }
 
         let texture_creator = canvas.texture_creator();
         let surface = font
             .render(&format!("{:.2}", a))
+            .blended(text_color)
+            .map_err(|e| e.to_string())
+            .unwrap();
+        let texture = texture_creator
+            .create_texture_from_surface(&surface)
+            .map_err(|e| e.to_string())
+            .unwrap();
+
+        let TextureQuery { width, height, .. } = texture.query();
+        canvas
+            .copy(&texture, None, Rect::from_center(point, width, height))
+            .unwrap();
+    }
+}
+
+fn draw_layer_text<const SIZE: usize>(
+    canvas: &mut Canvas<Surface>,
+    font: &Font,
+    layer: [&str; SIZE],
+    max_width: usize,
+    selected_node: Option<(usize, usize)>,
+    layer_index: isize,
+    x: i32,
+) {
+    for (i, a) in layer.iter().enumerate() {
+        let off = (max_width - layer.len()) / 2;
+        let point = (x, (40 + 40 * (off + i)) as i32);
+
+        let selected = selected_node
+            .map(|s| s.0 as isize == layer_index && s.1 == i)
+            .unwrap_or(true);
+
+        let node_color = Color::RGB(255, 183, 3);
+        let text_color = Color::RGB(47, 72, 88);
+        let node_radius = 12.;
+
+        if selected {
+            canvas
+                .filled_circle(point.0 as i16, point.1 as i16, node_radius as i16, node_color)
+                .unwrap();
+        } else {
+            canvas
+                .circle(point.0 as i16, point.1 as i16, node_radius as i16, node_color)
+                .unwrap();
+        }
+
+        let texture_creator = canvas.texture_creator();
+        let surface = font
+            .render(a)
             .blended(text_color)
             .map_err(|e| e.to_string())
             .unwrap();
@@ -212,7 +262,7 @@ impl BrainRenderModel {
 
         let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string()).unwrap();
 
-        let font = ttf_context.load_font_from_rwops(rwops, 14).unwrap();
+        let font = ttf_context.load_font_from_rwops(rwops, 12).unwrap();
 
         let buffer_size = (self.buffer.width(), self.buffer.height());
         assert_eq!(
@@ -246,9 +296,10 @@ impl BrainRenderModel {
                 max_width,
                 selected_node,
                 0,
-                40,
-                40 + 100,
+                20+ 40,
+                20+ 40 + 100,
             );
+
             draw_connections::<8, 8>(
                 &mut canvas,
                 &font,
@@ -256,11 +307,11 @@ impl BrainRenderModel {
                 max_width,
                 selected_node,
                 1,
-                40 + 100,
-                40 + 200,
+                20+ 40 + 100,
+                20+ 40 + 200,
             );
 
-            draw_layer_activations(&mut canvas, &font, a0, max_width, selected_node, -1, 40);
+            draw_layer_activations(&mut canvas, &font, a0, max_width, selected_node, -1, 20 + 40);
 
             draw_layer_activations(
                 &mut canvas,
@@ -269,7 +320,7 @@ impl BrainRenderModel {
                 max_width,
                 selected_node,
                 0,
-                40 + 100,
+                20+ 40 + 100,
             );
 
             draw_layer_activations(
@@ -279,7 +330,30 @@ impl BrainRenderModel {
                 max_width,
                 selected_node,
                 1,
-                40 + 200,
+                20+ 40 + 200,
+            );
+
+            draw_layer_text(
+                &mut canvas,
+                &font,
+                [
+                    "E/C", "FP/", "R-F", "A", "BP/", "R-B", "a", "r", "g", "b", "B/C", "R0", "R1", "R2", "R3",
+                    "R4",
+                ],
+                max_width,
+                selected_node,
+                -1,
+                20,
+            );
+
+            draw_layer_text(
+                &mut canvas,
+                &font,
+                ["V", "R", "RV", "BR", "R0", "R1", "R2", "R3"],
+                max_width,
+                selected_node,
+                1,
+                20+ 40 + 200 + 40,
             );
 
             canvas.present();
