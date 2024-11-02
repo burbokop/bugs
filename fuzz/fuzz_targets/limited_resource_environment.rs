@@ -2,7 +2,7 @@
 #![feature(duration_constructors)]
 #![feature(duration_millis_float)]
 
-use std::{f64::consts::PI, time::Duration};
+use std::{f64::consts::PI, ops::AddAssign, time::{Duration, SystemTime}};
 
 use bugs::{
     bug::Bug,
@@ -31,20 +31,43 @@ fn pretty_duration(duration: Duration) -> String {
     }
 }
 
+use bugs::time_point::TimePoint;
+
+#[derive(Clone)]
+struct FakeTime (SystemTime);
+
+impl TimePoint for FakeTime {
+    fn duration_since(&self, other: &Self) -> Duration {
+       self.0.duration_since(other.0).unwrap()
+    }
+}
+
+impl Default for FakeTime {
+    fn default() -> Self {
+        Self(std::time::UNIX_EPOCH)
+    }
+}
+
+impl AddAssign<Duration> for FakeTime {
+    fn add_assign(&mut self, rhs: Duration) {
+        self.0 += rhs
+    }
+}
+
 // Runs small simulation with limited resources until no bugs are left. Uses input data as seed for random generator.
 fuzz_target!(|data: &[u8]| {
     let mut rng: Pcg64 = Seeder::from(data).make_rng();
-    let the_beginning_of_times = std::time::UNIX_EPOCH;
+    let the_beginning_of_times = FakeTime::default();
 
     let mut environment = Environment::new(
-        the_beginning_of_times,
+        the_beginning_of_times.clone(),
         Food::generate_vec(&mut rng, -50. ..50., -50. ..50., 0. ..1., 1024),
         vec![],
         vec![Bug::give_birth_with_max_energy(
             Chromosome::new_random(256, (-1.)..1., &mut rng),
             (0., 0.).into(),
             Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
-            the_beginning_of_times,
+            the_beginning_of_times.clone(),
         )],
     );
 
@@ -66,8 +89,7 @@ fuzz_target!(|data: &[u8]| {
                 pretty_duration(
                     environment
                         .now()
-                        .duration_since(the_beginning_of_times)
-                        .unwrap()
+                        .duration_since(&the_beginning_of_times)
                 ),
                 environment.bugs_count(),
                 environment.food().len()

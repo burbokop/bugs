@@ -1,10 +1,5 @@
 use std::{
-    cell::Ref,
-    error::Error,
-    f64::consts::PI,
-    fmt::Display,
-    sync::atomic::{AtomicUsize, Ordering},
-    time::Duration,
+    cell::Ref, error::Error, f64::consts::PI, fmt::Display, ops::Deref, sync::atomic::{AtomicUsize, Ordering}, time::Duration
 };
 
 use chromosome::Chromosome;
@@ -15,11 +10,7 @@ use rand::RngCore;
 pub const EAT_FOOD_MAX_PROXIMITY: NoNeg<Float> = noneg_float(20.);
 
 use crate::{
-    brain::{self, Brain, VerboseOutput},
-    chromo_utils::ExtendedChromosome as _,
-    environment::{Environment, EnvironmentRequest, Food},
-    math::{noneg_float, sign, AbsAsNoNeg as _, Angle, Complex, DeltaAngle, NoNeg},
-    utils::{self, Color, Float, TimePoint},
+    brain::{self, Brain, VerboseOutput}, chromo_utils::ExtendedChromosome as _, environment::{Environment, EnvironmentRequest, Food}, math::{noneg_float, sign, AbsAsNoNeg as _, Angle, Complex, DeltaAngle, NoNeg}, time_point::TimePoint, utils::{self, Color, Float}
 };
 
 use crate::math::Point;
@@ -50,7 +41,9 @@ mod capacity {
 
     #[cfg(test)]
     mod tests {
-        use crate::bug::capacity::{BUG_BABY_CHARGE_CAPACITY_PER_SIZE, BUG_ENERGY_CAPACITY_PER_SIZE};
+        use crate::bug::capacity::{
+            BUG_BABY_CHARGE_CAPACITY_PER_SIZE, BUG_ENERGY_CAPACITY_PER_SIZE,
+        };
 
         #[test]
         fn capacity_per_size() {
@@ -66,7 +59,7 @@ pub struct BrainLog {
     pub activations: ([Float; 16], [Float; 8], [Float; 8]),
 }
 
-pub struct Bug {
+pub struct Bug<T> {
     id: usize,
     chromosome: Chromosome<Float>,
     brain: Brain,
@@ -75,7 +68,7 @@ pub struct Bug {
     rotation: Angle<Float>,
     size: NoNeg<Float>,
     energy_level: NoNeg<Float>,
-    birth_instant: TimePoint,
+    birth_instant: T,
     max_age: Duration,
     color: Color,
     baby_charge_level: NoNeg<Float>,
@@ -123,7 +116,7 @@ impl GeneticFeatures {
     }
 }
 
-impl Bug {
+impl<T> Bug<T> {
     pub fn id(&self) -> usize {
         self.id
     }
@@ -164,10 +157,10 @@ impl Bug {
         self.baby_charge_level
     }
 
-    pub fn age(&self, now: TimePoint) -> NoNeg<Float> {
+    pub fn age(&self, now: T) -> NoNeg<Float>
+    where T:TimePoint{
         NoNeg::wrap(
-            now.duration_since(self.birth_instant)
-                .unwrap()
+            now.duration_since(&self.birth_instant)
                 .div_duration_f64(self.max_age),
         )
         .unwrap()
@@ -194,7 +187,7 @@ impl Bug {
         position: Point<Float>,
         rotation: Angle<Float>,
         energy_level: NoNeg<Float>,
-        now: TimePoint,
+        now: T,
     ) -> Result<Self, BugEnergyCapacityExceeded> {
         let features = GeneticFeatures::from_chromosome(&chromosome);
 
@@ -225,7 +218,7 @@ impl Bug {
         chromosome: Chromosome<Float>,
         position: Point<Float>,
         rotation: Angle<Float>,
-        now: TimePoint,
+        now: T,
     ) -> Self {
         let features = GeneticFeatures::from_chromosome(&chromosome);
 
@@ -252,11 +245,11 @@ impl Bug {
         position: Point<Float>,
         rotation: Angle<Float>,
         energy_level: NoNeg<Float>,
-        now: TimePoint,
-    ) -> Vec<Bug> {
+        now: T,
+    ) -> Vec<Self> where T:Clone{
         let features = GeneticFeatures::from_chromosome(&chromosome);
         let energy_capacity = capacity::energy_capacity(features.size);
-        let mut result: Vec<Bug> = Default::default();
+        let mut result: Vec<Self> = Default::default();
 
         let n = (energy_level / energy_capacity).floor();
 
@@ -270,7 +263,7 @@ impl Bug {
                 rotation,
                 size: features.size,
                 energy_level: energy_capacity,
-                birth_instant: now,
+                birth_instant: now.clone(),
                 max_age: features.max_age,
                 color: features.color.clone(),
                 baby_charge_level: noneg_float(0.),
@@ -289,7 +282,7 @@ impl Bug {
             rotation,
             size: features.size,
             energy_level: reminder,
-            birth_instant: now,
+            birth_instant: now.clone(),
             max_age: features.max_age,
             color: features.color.clone(),
             baby_charge_level: noneg_float(0.),
@@ -299,7 +292,7 @@ impl Bug {
         result
     }
 
-    fn dst_to_bug(&self, other: &Bug) -> Float {
+    fn dst_to_bug(&self, other: &Self) -> Float {
         (self.position - other.position).len()
     }
 
@@ -308,7 +301,7 @@ impl Bug {
     }
 
     /// return in redians
-    fn direction_to_bug(&self, other: &Bug) -> Angle<Float> {
+    fn direction_to_bug(&self, other: &Self) -> Angle<Float> {
         (self.position - other.position()).angle()
     }
 
@@ -317,12 +310,12 @@ impl Bug {
         (self.position - other.position()).angle()
     }
 
-    fn find_nearest_bug<'a>(&self, env: &'a Environment) -> Option<Ref<'a, Bug>> {
+    fn find_nearest_bug<'a>(&self, env: &'a Environment<T>) -> Option<Ref<'a, Self>> {
         env.bugs()
-            .min_by(|a, b| self.dst_to_bug(a).partial_cmp(&self.dst_to_bug(b)).unwrap())
+            .min_by(|a, b| self.dst_to_bug(a.deref()).partial_cmp(&self.dst_to_bug(b.deref())).unwrap())
     }
 
-    fn find_nearest_food<'a>(&self, env: &'a Environment) -> Option<&'a Food> {
+    fn find_nearest_food<'a>(&self, env: &'a Environment<T>) -> Option<&'a Food> {
         env.food().iter().min_by(|a, b| {
             self.dst_to_food(a)
                 .partial_cmp(&&self.dst_to_food(b))
@@ -330,7 +323,7 @@ impl Bug {
         })
     }
 
-    fn reproduce_asexually<R: RngCore>(&self, rng: &mut R, now: TimePoint) -> Vec<Bug> {
+    fn reproduce_asexually<R: RngCore>(&self, rng: &mut R, now: T) -> Vec<Self> where T:Clone {
         Bug::give_birth_to_twins(
             self.chromosome.mutated_ext(|_| 0.01..0.8, 0.01, rng),
             self.position,
@@ -340,7 +333,7 @@ impl Bug {
         )
     }
 
-    fn reproduce_sexually(&self, partner: &Bug) -> Bug {
+    fn reproduce_sexually(&self, partner: &Self) -> Self {
         todo!()
     }
 
@@ -357,10 +350,10 @@ impl Bug {
 
     pub(crate) fn proceed<R: RngCore>(
         &mut self,
-        env: &Environment,
+        env: &Environment<T>,
         dt: Duration,
         rng: &mut R,
-    ) -> Vec<EnvironmentRequest> {
+    ) -> Vec<EnvironmentRequest<T>> where T: TimePoint + Clone {
         let nearest_food = self.find_nearest_food(env);
         let proximity_to_food = if let Some(nearest_food) = nearest_food {
             self.dst_to_food(nearest_food)
@@ -486,7 +479,7 @@ impl Bug {
             );
         }
 
-        let mut requests: Vec<EnvironmentRequest> = Default::default();
+        let mut requests: Vec<EnvironmentRequest<T>> = Default::default();
 
         if let Some(nearest_food) = nearest_food {
             if proximity_to_food

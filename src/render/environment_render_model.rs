@@ -26,9 +26,9 @@ impl Default for EnvironmentRenderModel {
 }
 
 impl EnvironmentRenderModel {
-    pub fn render(
+    pub fn render<T>(
         &mut self,
-        environment: &Environment,
+        environment: &Environment<T>,
         camera: &Camera,
         selected_bug_id: &Option<usize>,
         requested_canvas_width: u32,

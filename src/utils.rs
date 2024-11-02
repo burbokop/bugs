@@ -6,7 +6,6 @@ use rand::distributions::uniform::{SampleRange, SampleUniform};
 use crate::math::NoNeg;
 
 pub type Float = f64;
-pub type TimePoint = SystemTime;
 
 #[derive(Debug, Clone)]
 pub struct Color {

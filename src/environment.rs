@@ -1,15 +1,10 @@
 use core::range::Range;
 use std::{
-    cell::{Ref, RefCell},
-    f64::consts::PI,
-    sync::atomic::{AtomicUsize, Ordering},
-    time::Duration,
+    cell::{Ref, RefCell}, f64::consts::PI, sync::atomic::{AtomicUsize, Ordering}, time::Duration
 };
 
 use crate::{
-    bug::Bug,
-    math::{noneg_float, Angle, NoNeg, Point, Rect, Size},
-    utils::{sample_range_from_range, Float, TimePoint},
+    bug::Bug, math::{noneg_float, Angle, NoNeg, Point, Rect, Size}, time_point::TimePoint, utils::{sample_range_from_range, Float}
 };
 use chromosome::Chromosome;
 use rand::Rng;
@@ -24,12 +19,12 @@ pub struct Food {
 }
 
 /// Generates food around itself over time
-pub struct FoodSource {
+pub struct FoodSource<T> {
     position: Point<Float>,
     size: Size<Float>,
     energy_range: Range<Float>,
     spawn_interval: Duration,
-    last_food_creation_instant: TimePoint,
+    last_food_creation_instant: T,
 }
 
 pub struct FoodSourceCreateInfo {
@@ -40,7 +35,7 @@ pub struct FoodSourceCreateInfo {
 }
 
 impl FoodSourceCreateInfo {
-    fn create(self, last_food_creation_instant: TimePoint) -> FoodSource {
+    fn create<T>(self, last_food_creation_instant: T) -> FoodSource<T> {
         FoodSource {
             position: self.position,
             size: self.size,
@@ -51,7 +46,7 @@ impl FoodSourceCreateInfo {
     }
 }
 
-impl FoodSource {
+impl<T> FoodSource<T> {
     pub fn position(&self) -> Point<Float> {
         self.position
     }
@@ -108,11 +103,11 @@ impl Food {
     }
 }
 
-pub(crate) enum EnvironmentRequest {
+pub(crate) enum EnvironmentRequest<T> {
     Kill {
         id: usize,
     },
-    GiveBirth(Bug),
+    GiveBirth(Bug<T>),
     TransferEnergyFromFoodToBug {
         food_id: usize,
         bug_id: usize,
@@ -120,32 +115,32 @@ pub(crate) enum EnvironmentRequest {
     },
 }
 
-pub struct Environment {
+pub struct Environment<T> {
     food: Vec<Food>,
-    food_sources: Vec<FoodSource>,
-    bugs: Vec<RefCell<Bug>>,
-    creation_time: TimePoint,
-    now: TimePoint,
+    food_sources: Vec<FoodSource<T>>,
+    bugs: Vec<RefCell<Bug<T>>>,
+    creation_time: T,
+    now: T,
 }
 
-impl Environment {
+impl<T> Environment<T> {
     pub fn new(
-        now: TimePoint,
+        now: T,
         food: Vec<Food>,
-        food_sources: Vec<FoodSource>,
-        bugs: Vec<Bug>,
-    ) -> Self {
+        food_sources: Vec<FoodSource<T>>,
+        bugs: Vec<Bug<T>>,
+    ) -> Self where T: Clone{
         Self {
             food,
             food_sources,
             bugs: bugs.into_iter().map(RefCell::new).collect(),
-            creation_time: now,
+            creation_time: now.clone(),
             now,
         }
     }
 
     pub fn generate<R: RngCore, Range: SampleRange<Float>>(
-        now: TimePoint,
+        now: T,
         rng: &mut R,
         food_sources: Vec<FoodSourceCreateInfo>,
         x_range: Range,
@@ -156,6 +151,7 @@ impl Environment {
     ) -> Self
     where
         Range: Clone,
+        T: Clone
     {
         Self {
             food: Food::generate_vec(rng, x_range, y_range, food_e_range, food_count),
@@ -187,31 +183,30 @@ impl Environment {
                     bug_position,
                     Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
                     noneg_float(50.),
-                    now,
+                    now.clone(),
                 )
                 .unwrap(),
             )],
-            creation_time: now,
+            creation_time: now.clone(),
             now,
         }
     }
 
-    pub fn now(&self) -> &TimePoint {
+    pub fn now(&self) -> &T {
         &self.now
     }
 
-    pub fn creation_time(&self) -> &TimePoint {
+    pub fn creation_time(&self) -> &T {
         &self.creation_time
     }
 
-    pub fn proceed<R: RngCore>(&mut self, dt: Duration, rng: &mut R) {
+    pub fn proceed<R: RngCore>(&mut self, dt: Duration, rng: &mut R) where T: TimePoint + Clone {
         self.now += dt;
 
         for food_source in &mut self.food_sources {
             let n = self
                 .now
-                .duration_since(food_source.last_food_creation_instant)
-                .unwrap()
+                .duration_since(&food_source.last_food_creation_instant)
                 .div_duration_f64(food_source.spawn_interval)
                 .round();
 
@@ -227,7 +222,7 @@ impl Environment {
             food_source.last_food_creation_instant += food_source.spawn_interval.mul_f64(n);
         }
 
-        let mut requests: Vec<EnvironmentRequest> = Default::default();
+        let mut requests: Vec<EnvironmentRequest<T>> = Default::default();
         for b in &self.bugs {
             requests.append(&mut b.borrow_mut().proceed(&self, dt, rng));
         }
@@ -245,7 +240,7 @@ impl Environment {
         }
     }
 
-    pub fn find_bug_by_id<'a>(&'a self, id: usize) -> Option<Ref<'a, Bug>> {
+    pub fn find_bug_by_id<'a>(&'a self, id: usize) -> Option<Ref<'a, Bug<T>>> {
         self.bugs
             .iter()
             .find_map(|bug| bug.try_borrow().ok().filter(|bug| bug.id() == id))
@@ -277,7 +272,7 @@ impl Environment {
         &self.food
     }
 
-    pub fn food_sources(&self) -> &[FoodSource] {
+    pub fn food_sources(&self) -> &[FoodSource<T>] {
         &self.food_sources
     }
 
@@ -285,7 +280,7 @@ impl Environment {
         self.bugs.len()
     }
 
-    pub fn bugs<'a>(&'a self) -> impl Iterator<Item = Ref<'a, Bug>> {
+    pub fn bugs<'a>(&'a self) -> impl Iterator<Item = Ref<'a, Bug<T>>> {
         self.bugs.iter().filter_map(|x| x.try_borrow().ok())
     }
 }

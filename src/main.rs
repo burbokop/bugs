@@ -9,7 +9,7 @@ use render::{BrainRenderModel, Camera, EnvironmentRenderModel};
 use slint::{ComponentHandle, PlatformError, Timer, TimerMode};
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 mod app_utils;
 mod render;
@@ -19,7 +19,7 @@ slint::slint! {
 }
 
 struct State {
-    environment: Environment,
+    environment: Environment<Instant>,
     camera: Camera,
     environment_render_model: RefCell<EnvironmentRenderModel>,
     brain_render_model: RefCell<BrainRenderModel>,
@@ -35,7 +35,7 @@ pub fn main() -> Result<(), PlatformError> {
 
     let state = Rc::new(RefCell::new(State {
         environment: Environment::generate(
-            SystemTime::now(),
+            Instant::now(),
             &mut rng,
             vec![
                 FoodSourceCreateInfo {
@@ -268,7 +268,6 @@ pub fn main() -> Result<(), PlatformError> {
                         .environment
                         .now()
                         .duration_since(state.environment.creation_time().clone())
-                        .unwrap()
                         .as_millis() as i64,
                     pause: state.pause,
                     time_speed: state.time_speed as f32,
