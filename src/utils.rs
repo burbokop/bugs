@@ -1,39 +1,19 @@
 use core::range::Range;
-use std::ops::{Add, Div, Mul, Sub};
+use std::time::SystemTime;
 
-use rand::{
-    distributions::uniform::{SampleRange, SampleUniform},
-    RngCore,
-};
+use rand::distributions::uniform::{SampleRange, SampleUniform};
 
 use crate::math::NoNeg;
 
 pub type Float = f64;
+pub type TimePoint = SystemTime;
 
 #[derive(Debug, Clone)]
-pub(crate) struct Color {
-    pub(crate) a: Float,
-    pub(crate) r: Float,
-    pub(crate) g: Float,
-    pub(crate) b: Float,
-}
-
-pub(crate) fn color_to_slint_rgba_color(c: &Color) -> slint::RgbaColor<f32> {
-    slint::RgbaColor {
-        alpha: c.a as f32,
-        red: c.r as f32,
-        green: c.g as f32,
-        blue: c.b as f32,
-    }
-}
-
-pub(crate) fn color_to_sdl2_rgba_color(c: &Color) -> sdl2::pixels::Color {
-    sdl2::pixels::Color::RGBA(
-        (c.r * 255.) as u8,
-        (c.g * 255.) as u8,
-        (c.b * 255.) as u8,
-        (c.a * 255.) as u8,
-    )
+pub struct Color {
+    pub a: Float,
+    pub r: Float,
+    pub g: Float,
+    pub b: Float,
 }
 
 pub(crate) fn normalize<const SIZE: usize>(v: [Float; SIZE]) -> [Float; SIZE] {

@@ -6,7 +6,7 @@ use std::{
 use super::{Complex, One, Point, Rect, Size, Vector, Zero};
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Matrix<T>([T; 9]);
+pub struct Matrix<T>([T; 9]);
 
 mod indices {
     /// horizontal scale factor
@@ -37,7 +37,7 @@ impl<T> Matrix<T> {
      *  | 0  0  1 |
      * @return identity matrix
      */
-    pub(crate) fn identity() -> Self
+    pub fn identity() -> Self
     where
         T: Zero + One,
     {
@@ -63,7 +63,7 @@ impl<T> Matrix<T> {
      * @param y - vertical scale factor
      * @return Matrix with scale
      */
-    pub(crate) fn scale(x: T, y: T) -> Self
+    pub fn scale(x: T, y: T) -> Self
     where
         T: Zero + One,
     {
@@ -114,7 +114,7 @@ impl<T> Matrix<T> {
      * @param rad
      * @return Matrix with rotation
      */
-    pub(crate) fn rotate(rotor: Complex<T>) -> Self
+    pub fn rotate(rotor: Complex<T>) -> Self
     where
         T: Zero + One + Clone + Neg<Output = T>,
     {
@@ -131,15 +131,15 @@ impl<T> Matrix<T> {
         ])
     }
 
-    pub(crate) fn scale_x(&self) -> &T {
+    pub fn scale_x(&self) -> &T {
         return &self.0[indices::SCALE_X];
     }
 
-    pub(crate) fn scale_y(&self) -> &T {
+    pub fn scale_y(&self) -> &T {
         return &self.0[indices::SCALE_Y];
     }
 
-    pub(crate) fn translation(&self) -> Vector<T>
+    pub fn translation(&self) -> Vector<T>
     where
         T: Clone,
     {

@@ -3,7 +3,7 @@ use std::ops::{Add, Mul};
 use super::{Angle, Atan2, Sqr, Sqrt};
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Vector<T> {
+pub struct Vector<T> {
     x: T,
     y: T,
 }

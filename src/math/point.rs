@@ -3,7 +3,7 @@ use std::ops::Sub;
 use super::{Vector, Zero};
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Point<T> {
+pub struct Point<T> {
     x: T,
     y: T,
 }

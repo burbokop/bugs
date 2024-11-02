@@ -6,12 +6,12 @@ use std::{
 use super::{Abs, Cos, NoNeg, Pi, RemEuclid, Sin, Two, Zero};
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Angle<T> {
+pub struct Angle<T> {
     value: T,
 }
 
 impl<T> Angle<T> {
-    pub(crate) fn from_radians(value: T) -> Self {
+    pub fn from_radians(value: T) -> Self {
         Self { value }
     }
 
@@ -20,14 +20,14 @@ impl<T> Angle<T> {
     }
 
     /// Result in range 0..PI*2
-    pub(crate) fn radians(self) -> T
+    pub fn radians(self) -> T
     where
         T: Pi + Two + Mul<Output = T> + RemEuclid<Output = T>,
     {
         normalize_radians(self.value)
     }
 
-    pub(crate) fn degrees(self) -> T
+    pub fn degrees(self) -> T
     where
         T: Pi
             + Two
@@ -83,12 +83,12 @@ impl<T> Angle<T> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct DeltaAngle<T> {
+pub struct DeltaAngle<T> {
     value: T,
 }
 
 impl<T> DeltaAngle<T> {
-    pub(crate) fn from_radians(value: T) -> Self {
+    pub fn from_radians(value: T) -> Self {
         Self { value }
     }
 
@@ -120,7 +120,7 @@ impl<T> DeltaAngle<NoNeg<T>> {
         normalize_delta_radians(self.value.unwrap())
     }
 
-    pub(crate) fn unwrap_degrees(self) -> T
+    pub fn unwrap_degrees(self) -> T
     where
         T: Pi + Two + Mul<Output = T> + Mul<f64, Output = T> + Div<Output = T> + Rem<Output = T>,
     {

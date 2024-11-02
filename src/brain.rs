@@ -32,35 +32,35 @@ fn activation_to_noneg_delta_angle(a: Float) -> DeltaAngle<NoNeg<Float>> {
     )
 }
 
-pub(crate) struct Brain {
+pub struct Brain {
     net: Net<Float>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Input {
-    pub(crate) energy_level: NoNeg<Float>,
-    pub(crate) energy_capacity: NoNeg<Float>,
-    pub(crate) rotation: Angle<Float>,
-    pub(crate) proximity_to_food: Float,
-    pub(crate) direction_to_nearest_food: Angle<Float>,
-    pub(crate) age: NoNeg<Float>,
-    pub(crate) proximity_to_bug: Float,
-    pub(crate) direction_to_nearest_bug: Angle<Float>,
-    pub(crate) color_of_nearest_bug: Color,
-    pub(crate) baby_charge_level: NoNeg<Float>,
-    pub(crate) baby_charge_capacity: NoNeg<Float>,
+pub struct Input {
+    pub energy_level: NoNeg<Float>,
+    pub energy_capacity: NoNeg<Float>,
+    pub rotation: Angle<Float>,
+    pub proximity_to_food: Float,
+    pub direction_to_nearest_food: Angle<Float>,
+    pub age: NoNeg<Float>,
+    pub proximity_to_bug: Float,
+    pub direction_to_nearest_bug: Angle<Float>,
+    pub color_of_nearest_bug: Color,
+    pub baby_charge_level: NoNeg<Float>,
+    pub baby_charge_capacity: NoNeg<Float>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Output {
+pub struct Output {
     /// in pixels per second
-    pub(crate) velocity: Float,
+    pub velocity: Float,
     /// rotaion relative to self rotation
-    pub(crate) relative_desired_rotation: DeltaAngle<Float>,
+    pub relative_desired_rotation: DeltaAngle<Float>,
     /// per second
-    pub(crate) rotation_velocity: DeltaAngle<NoNeg<Float>>,
+    pub rotation_velocity: DeltaAngle<NoNeg<Float>>,
     /// energy per second
-    pub(crate) baby_charging_rate: NoNeg<Float>,
+    pub baby_charging_rate: NoNeg<Float>,
 }
 
 pub(crate) struct VerboseOutput {
@@ -114,7 +114,7 @@ impl From<Arr<Float, 8>> for Output {
 }
 
 impl Brain {
-    pub(crate) fn layers(
+    pub fn layers(
         &self,
     ) -> (
         &PerceptronLayer<Float, 16, 8>,

@@ -1,4 +1,4 @@
-use crate::{brain::Brain, bug::BrainLog, utils::Float};
+use bugs::{brain::Brain, bug::BrainLog, utils::Float};
 use font_loader::system_fonts;
 use sdl2::{
     gfx::primitives::DrawRenderer as _,
@@ -47,11 +47,21 @@ fn draw_layer_activations<const SIZE: usize>(
 
         if selected {
             canvas
-                .filled_circle(point.0 as i16, point.1 as i16, node_radius as i16, node_color)
+                .filled_circle(
+                    point.0 as i16,
+                    point.1 as i16,
+                    node_radius as i16,
+                    node_color,
+                )
                 .unwrap();
         } else {
             canvas
-                .circle(point.0 as i16, point.1 as i16, node_radius as i16, node_color)
+                .circle(
+                    point.0 as i16,
+                    point.1 as i16,
+                    node_radius as i16,
+                    node_color,
+                )
                 .unwrap();
         }
 
@@ -96,11 +106,21 @@ fn draw_layer_text<const SIZE: usize>(
 
         if selected {
             canvas
-                .filled_circle(point.0 as i16, point.1 as i16, node_radius as i16, node_color)
+                .filled_circle(
+                    point.0 as i16,
+                    point.1 as i16,
+                    node_radius as i16,
+                    node_color,
+                )
                 .unwrap();
         } else {
             canvas
-                .circle(point.0 as i16, point.1 as i16, node_radius as i16, node_color)
+                .circle(
+                    point.0 as i16,
+                    point.1 as i16,
+                    node_radius as i16,
+                    node_color,
+                )
                 .unwrap();
         }
 
@@ -296,8 +316,8 @@ impl BrainRenderModel {
                 max_width,
                 selected_node,
                 0,
-                20+ 40,
-                20+ 40 + 100,
+                20 + 40,
+                20 + 40 + 100,
             );
 
             draw_connections::<8, 8>(
@@ -307,11 +327,19 @@ impl BrainRenderModel {
                 max_width,
                 selected_node,
                 1,
-                20+ 40 + 100,
-                20+ 40 + 200,
+                20 + 40 + 100,
+                20 + 40 + 200,
             );
 
-            draw_layer_activations(&mut canvas, &font, a0, max_width, selected_node, -1, 20 + 40);
+            draw_layer_activations(
+                &mut canvas,
+                &font,
+                a0,
+                max_width,
+                selected_node,
+                -1,
+                20 + 40,
+            );
 
             draw_layer_activations(
                 &mut canvas,
@@ -320,7 +348,7 @@ impl BrainRenderModel {
                 max_width,
                 selected_node,
                 0,
-                20+ 40 + 100,
+                20 + 40 + 100,
             );
 
             draw_layer_activations(
@@ -330,15 +358,15 @@ impl BrainRenderModel {
                 max_width,
                 selected_node,
                 1,
-                20+ 40 + 200,
+                20 + 40 + 200,
             );
 
             draw_layer_text(
                 &mut canvas,
                 &font,
                 [
-                    "E/C", "FP/", "R-F", "A", "BP/", "R-B", "a", "r", "g", "b", "B/C", "R0", "R1", "R2", "R3",
-                    "R4",
+                    "E/C", "FP/", "R-F", "A", "BP/", "R-B", "a", "r", "g", "b", "B/C", "R0", "R1",
+                    "R2", "R3", "R4",
                 ],
                 max_width,
                 selected_node,
@@ -353,7 +381,7 @@ impl BrainRenderModel {
                 max_width,
                 selected_node,
                 1,
-                20+ 40 + 200 + 40,
+                20 + 40 + 200 + 40,
             );
 
             canvas.present();

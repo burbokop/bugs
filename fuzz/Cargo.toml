@@ -1,0 +1,25 @@
+[package]
+name = "bugs-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+rand = "0.8.5"
+rand_seeder = "0.3.0"
+rand_pcg = "0.3.1"
+chromosome = "0.1.0"
+
+[dependencies.bugs]
+path = ".."
+
+[[bin]]
+name = "limited_resource_environment"
+path = "fuzz_targets/limited_resource_environment.rs"
+test = false
+doc = false
+bench = false

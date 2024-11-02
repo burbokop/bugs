@@ -1,26 +1,23 @@
 #![feature(new_range_api)]
 #![feature(extract_if)]
 
-use environment::{Environment, FoodSourceCreateInfo};
-use math::Point;
+use app_utils::color_to_slint_rgba_color;
+use bugs::environment::{Environment, FoodSourceCreateInfo};
+use bugs::math::Point;
+use bugs::utils::Float;
 use render::{BrainRenderModel, Camera, EnvironmentRenderModel};
 use slint::{ComponentHandle, PlatformError, Timer, TimerMode};
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::time::{Duration, Instant};
-use utils::{color_to_slint_rgba_color, Float};
+use std::time::{Duration, Instant, SystemTime};
 
-mod brain;
-mod bug;
-mod chromo_utils;
-mod environment;
-mod math;
+mod app_utils;
 mod render;
-mod utils;
 
 slint::slint! {
     export { MainWindow, BugInfo, EnvInfo } from "src/main.slint";
 }
+
 struct State {
     environment: Environment,
     camera: Camera,
@@ -37,7 +34,8 @@ pub fn main() -> Result<(), PlatformError> {
     let mut rng = rand::thread_rng();
 
     let state = Rc::new(RefCell::new(State {
-        environment: Environment::new(
+        environment: Environment::generate(
+            SystemTime::now(),
             &mut rng,
             vec![
                 FoodSourceCreateInfo {
@@ -137,7 +135,7 @@ pub fn main() -> Result<(), PlatformError> {
 
                 if let Some(nearest_bug) = nearest_bug {
                     state.selected_bug_id = if (point - nearest_bug.1).len()
-                        < (bug::EAT_FOOD_MAX_PROXIMITY * nearest_bug.2).unwrap()
+                        < (bugs::bug::EAT_FOOD_MAX_PROXIMITY * nearest_bug.2).unwrap()
                     {
                         Some(nearest_bug.0)
                     } else {
@@ -270,6 +268,7 @@ pub fn main() -> Result<(), PlatformError> {
                         .environment
                         .now()
                         .duration_since(state.environment.creation_time().clone())
+                        .unwrap()
                         .as_millis() as i64,
                     pause: state.pause,
                     time_speed: state.time_speed as f32,

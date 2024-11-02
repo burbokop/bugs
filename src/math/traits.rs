@@ -2,7 +2,7 @@ use core::f32;
 
 use super::Angle;
 
-pub(crate) trait Sqr {
+pub trait Sqr {
     type Output;
     fn sqr(self) -> Self::Output;
 }
@@ -21,7 +21,7 @@ impl Sqr for f64 {
     }
 }
 
-pub(crate) trait Sqrt {
+pub trait Sqrt {
     type Output;
     fn sqrt(self) -> Self::Output;
 }
@@ -42,7 +42,7 @@ impl Sqrt for f64 {
     }
 }
 
-pub(crate) trait Cos {
+pub trait Cos {
     type Output;
     fn cos(self) -> Self::Output;
 }
@@ -63,7 +63,7 @@ impl Cos for f64 {
     }
 }
 
-pub(crate) trait Sin {
+pub trait Sin {
     type Output;
     fn sin(self) -> Self::Output;
 }
@@ -84,7 +84,7 @@ impl Sin for f64 {
     }
 }
 
-pub(crate) trait Atan2<Rhs = Self> {
+pub trait Atan2<Rhs = Self> {
     type Output;
     fn atan2(self, rhs: Rhs) -> Angle<Self::Output>;
 }
@@ -105,7 +105,7 @@ impl Atan2 for f64 {
     }
 }
 
-pub(crate) trait RemEuclid<Rhs = Self> {
+pub trait RemEuclid<Rhs = Self> {
     type Output;
     fn rem_euclid(self, rhs: Rhs) -> Self::Output;
 }
@@ -147,7 +147,7 @@ impl Abs for f64 {
     }
 }
 
-pub(crate) trait Zero {
+pub trait Zero {
     fn zero() -> Self;
 }
 
@@ -163,7 +163,7 @@ impl Zero for f64 {
     }
 }
 
-pub(crate) trait One {
+pub trait One {
     fn one() -> Self;
 }
 
@@ -195,7 +195,7 @@ impl MinusOne for f64 {
     }
 }
 
-pub(crate) trait Two {
+pub trait Two {
     fn two() -> Self;
 }
 
@@ -211,7 +211,7 @@ impl Two for f64 {
     }
 }
 
-pub(crate) trait Pi {
+pub trait Pi {
     fn pi() -> Self;
 }
 

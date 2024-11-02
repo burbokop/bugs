@@ -1,6 +1,6 @@
 use std::ops::{Add, Mul, Sub};
 
-use crate::{
+use bugs::{
     math::{Complex, Matrix, One, Point, Vector, Zero},
     utils::Float,
 };

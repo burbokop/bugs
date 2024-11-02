@@ -135,7 +135,7 @@ impl<T> Rect<T> {
         result.map(|a| Rect::from_lrtb(a.0, a.1, a.2, a.3))
     }
 
-    pub(crate) fn from_center(center: Point<T>, size: Size<T>) -> Self
+    pub fn from_center(center: Point<T>, size: Size<T>) -> Self
     where
         T: Clone + Two + Sub<Output = T> + Div<Output = T>,
     {
@@ -167,7 +167,7 @@ impl<T> Rect<T> {
         }
     }
 
-    pub(crate) fn contains(&self, other: &Rect<T>) -> bool
+    pub fn contains(&self, other: &Rect<T>) -> bool
     where
         T: PartialOrd + Add<Output = T> + Clone,
     {
@@ -177,7 +177,7 @@ impl<T> Rect<T> {
             && other.bottom() <= self.bottom();
     }
 
-    pub(crate) fn instersects(&self, other: &Rect<T>) -> bool
+    pub fn instersects(&self, other: &Rect<T>) -> bool
     where
         T: PartialOrd + Add<Output = T> + Clone,
     {

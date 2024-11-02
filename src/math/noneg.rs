@@ -10,7 +10,7 @@ use super::{Abs, IsNeg, Pi, Sqrt};
 
 /// Can not store negative numbers
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct NoNeg<T> {
+pub struct NoNeg<T> {
     value: T,
 }
 
@@ -61,7 +61,7 @@ impl<T> NoNeg<T> {
         }
     }
 
-    pub(crate) fn unwrap(self) -> T {
+    pub fn unwrap(self) -> T {
         self.value
     }
 
@@ -198,7 +198,7 @@ pub(crate) const fn noneg_f64(value: f64) -> NoNeg<f64> {
     NoNeg { value }
 }
 
-pub(crate) const fn noneg_float(value: Float) -> NoNeg<Float> {
+pub const fn noneg_float(value: Float) -> NoNeg<Float> {
     assert!(value >= 0.);
     NoNeg { value }
 }

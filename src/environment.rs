@@ -3,13 +3,13 @@ use std::{
     cell::{Ref, RefCell},
     f64::consts::PI,
     sync::atomic::{AtomicUsize, Ordering},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use crate::{
     bug::Bug,
     math::{noneg_float, Angle, NoNeg, Point, Rect, Size},
-    utils::{sample_range_from_range, Float},
+    utils::{sample_range_from_range, Float, TimePoint},
 };
 use chromosome::Chromosome;
 use rand::Rng;
@@ -17,22 +17,22 @@ use rand::{distributions::uniform::SampleRange, RngCore};
 
 static NEXT_FOOD_ID: AtomicUsize = AtomicUsize::new(0);
 
-pub(crate) struct Food {
+pub struct Food {
     id: usize,
     position: Point<Float>,
     energy: NoNeg<Float>,
 }
 
 /// Generates food around itself over time
-pub(crate) struct FoodSource {
+pub struct FoodSource {
     position: Point<Float>,
     size: Size<Float>,
     energy_range: Range<Float>,
     spawn_interval: Duration,
-    last_food_creation_instant: Instant,
+    last_food_creation_instant: TimePoint,
 }
 
-pub(crate) struct FoodSourceCreateInfo {
+pub struct FoodSourceCreateInfo {
     pub position: Point<Float>,
     pub size: Size<Float>,
     pub energy_range: Range<Float>,
@@ -40,7 +40,7 @@ pub(crate) struct FoodSourceCreateInfo {
 }
 
 impl FoodSourceCreateInfo {
-    fn create(self, last_food_creation_instant: Instant) -> FoodSource {
+    fn create(self, last_food_creation_instant: TimePoint) -> FoodSource {
         FoodSource {
             position: self.position,
             size: self.size,
@@ -52,11 +52,11 @@ impl FoodSourceCreateInfo {
 }
 
 impl FoodSource {
-    pub(crate) fn position(&self) -> Point<Float> {
+    pub fn position(&self) -> Point<Float> {
         self.position
     }
 
-    pub(crate) fn size(&self) -> Size<Float> {
+    pub fn size(&self) -> Size<Float> {
         self.size
     }
 }
@@ -66,7 +66,7 @@ impl Food {
         self.id
     }
 
-    pub(crate) fn position(&self) -> Point<Float> {
+    pub fn position(&self) -> Point<Float> {
         self.position
     }
 
@@ -74,7 +74,7 @@ impl Food {
         self.energy
     }
 
-    pub(crate) fn radius(&self) -> NoNeg<Float> {
+    pub fn radius(&self) -> NoNeg<Float> {
         (self.energy / noneg_float(PI)).sqrt() * noneg_float(10.)
     }
 
@@ -95,7 +95,7 @@ impl Food {
         }
     }
 
-    pub(crate) fn generate_vec<R: RngCore, RR: SampleRange<Float> + Clone>(
+    pub fn generate_vec<R: RngCore, RR: SampleRange<Float> + Clone>(
         rng: &mut R,
         x_range: RR,
         y_range: RR,
@@ -120,16 +120,32 @@ pub(crate) enum EnvironmentRequest {
     },
 }
 
-pub(crate) struct Environment {
+pub struct Environment {
     food: Vec<Food>,
     food_sources: Vec<FoodSource>,
     bugs: Vec<RefCell<Bug>>,
-    creation_time: Instant,
-    now: Instant,
+    creation_time: TimePoint,
+    now: TimePoint,
 }
 
 impl Environment {
-    pub fn new<R: RngCore, Range: SampleRange<Float>>(
+    pub fn new(
+        now: TimePoint,
+        food: Vec<Food>,
+        food_sources: Vec<FoodSource>,
+        bugs: Vec<Bug>,
+    ) -> Self {
+        Self {
+            food,
+            food_sources,
+            bugs: bugs.into_iter().map(RefCell::new).collect(),
+            creation_time: now,
+            now,
+        }
+    }
+
+    pub fn generate<R: RngCore, Range: SampleRange<Float>>(
+        now: TimePoint,
         rng: &mut R,
         food_sources: Vec<FoodSourceCreateInfo>,
         x_range: Range,
@@ -141,56 +157,61 @@ impl Environment {
     where
         Range: Clone,
     {
-        let now = Instant::now();
         Self {
             food: Food::generate_vec(rng, x_range, y_range, food_e_range, food_count),
             food_sources: food_sources
                 .into_iter()
                 .map(|x| x.create(now.clone()))
                 .collect(),
-            bugs: vec![RefCell::new(Bug::give_birth(
-                Chromosome {
-                    genes: (0..256)
-                        .map(|i| {
-                            if i == 0 {
-                                1.
-                            } else if i == 128 {
-                                2.
-                            } else if i == 128 + 8 + 8 + 8 {
-                                0.5
-                            // } else if i == 16 + 1 || i == 128 + 8 + 1 {
-                            //     2.
-                            } else if (0..208).contains(&i) {
-                                0.
-                            } else {
-                                1.
-                            }
-                        })
-                        .collect(),
-                },
-                bug_position,
-                Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
-                noneg_float(50.),
-                now,
-            ))],
+            bugs: vec![RefCell::new(
+                Bug::give_birth(
+                    Chromosome {
+                        genes: (0..256)
+                            .map(|i| {
+                                if i == 0 {
+                                    1.
+                                } else if i == 128 {
+                                    2.
+                                } else if i == 128 + 8 + 8 + 8 {
+                                    0.5
+                                // } else if i == 16 + 1 || i == 128 + 8 + 1 {
+                                //     2.
+                                } else if (0..208).contains(&i) {
+                                    0.
+                                } else {
+                                    1.
+                                }
+                            })
+                            .collect(),
+                    },
+                    bug_position,
+                    Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
+                    noneg_float(50.),
+                    now,
+                )
+                .unwrap(),
+            )],
             creation_time: now,
             now,
         }
     }
 
-    pub(crate) fn now(&self) -> &Instant {
+    pub fn now(&self) -> &TimePoint {
         &self.now
     }
 
-    pub(crate) fn creation_time(&self) -> &Instant {
+    pub fn creation_time(&self) -> &TimePoint {
         &self.creation_time
     }
 
-    pub(crate) fn proceed<R: RngCore>(&mut self, dt: Duration, rng: &mut R) {
+    pub fn proceed<R: RngCore>(&mut self, dt: Duration, rng: &mut R) {
         self.now += dt;
 
         for food_source in &mut self.food_sources {
-            let n = (self.now - food_source.last_food_creation_instant)
+            let n = self
+                .now
+                .duration_since(food_source.last_food_creation_instant)
+                .unwrap()
                 .div_duration_f64(food_source.spawn_interval)
                 .round();
 
@@ -224,7 +245,7 @@ impl Environment {
         }
     }
 
-    pub(crate) fn find_bug_by_id<'a>(&'a self, id: usize) -> Option<Ref<'a, Bug>> {
+    pub fn find_bug_by_id<'a>(&'a self, id: usize) -> Option<Ref<'a, Bug>> {
         self.bugs
             .iter()
             .find_map(|bug| bug.try_borrow().ok().filter(|bug| bug.id() == id))
@@ -252,19 +273,19 @@ impl Environment {
         }
     }
 
-    pub(crate) fn food(&self) -> &[Food] {
+    pub fn food(&self) -> &[Food] {
         &self.food
     }
 
-    pub(crate) fn food_sources(&self) -> &[FoodSource] {
+    pub fn food_sources(&self) -> &[FoodSource] {
         &self.food_sources
     }
 
-    pub(crate) fn bugs_count(&self) -> usize {
+    pub fn bugs_count(&self) -> usize {
         self.bugs.len()
     }
 
-    pub(crate) fn bugs<'a>(&'a self) -> impl Iterator<Item = Ref<'a, Bug>> {
+    pub fn bugs<'a>(&'a self) -> impl Iterator<Item = Ref<'a, Bug>> {
         self.bugs.iter().filter_map(|x| x.try_borrow().ok())
     }
 }
