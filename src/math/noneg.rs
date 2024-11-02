@@ -6,7 +6,7 @@ use std::{
 
 use crate::utils::Float;
 
-use super::{Abs, IsNeg, Pi, Sqrt};
+use super::{Abs, Floor, IsNeg, Pi, Sqrt};
 
 /// Can not store negative numbers
 #[derive(Clone, Copy, Debug)]
@@ -71,6 +71,15 @@ impl<T> NoNeg<T> {
     {
         NoNeg {
             value: self.value.sqrt(),
+        }
+    }
+
+    pub(crate) fn floor(self) -> NoNeg<<T as Floor>::Output>
+    where
+        T: Floor,
+    {
+        NoNeg {
+            value: self.value.floor(),
         }
     }
 }

@@ -147,6 +147,27 @@ impl Abs for f64 {
     }
 }
 
+pub(crate) trait Floor {
+    type Output;
+    fn floor(self) -> Self::Output;
+}
+
+impl Floor for f32 {
+    type Output = f32;
+
+    fn floor(self) -> Self::Output {
+        f32::floor(self)
+    }
+}
+
+impl Floor for f64 {
+    type Output = f64;
+
+    fn floor(self) -> Self::Output {
+        f64::floor(self)
+    }
+}
+
 pub trait Zero {
     fn zero() -> Self;
 }

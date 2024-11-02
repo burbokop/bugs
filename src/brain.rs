@@ -32,6 +32,7 @@ fn activation_to_noneg_delta_angle(a: Float) -> DeltaAngle<NoNeg<Float>> {
     )
 }
 
+#[derive(Clone)]
 pub struct Brain {
     net: Net<Float>,
 }

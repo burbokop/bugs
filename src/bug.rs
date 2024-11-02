@@ -50,6 +50,8 @@ mod capacity {
 
     #[cfg(test)]
     mod tests {
+        use crate::bug::capacity::{BUG_BABY_CHARGE_CAPACITY_PER_SIZE, BUG_ENERGY_CAPACITY_PER_SIZE};
+
         #[test]
         fn capacity_per_size() {
             // Because if BUG_BABY_CHARGE_CAPACITY_PER_SIZE > BUG_ENERGY_CAPACITY_PER_SIZE then newly born bug will exceed its energy capacity
@@ -244,6 +246,59 @@ impl Bug {
         }
     }
 
+    // Spend all energy to produce as much progeny as possible
+    pub fn give_birth_to_twins(
+        chromosome: Chromosome<Float>,
+        position: Point<Float>,
+        rotation: Angle<Float>,
+        energy_level: NoNeg<Float>,
+        now: TimePoint,
+    ) -> Vec<Bug> {
+        let features = GeneticFeatures::from_chromosome(&chromosome);
+        let energy_capacity = capacity::energy_capacity(features.size);
+        let mut result: Vec<Bug> = Default::default();
+
+        let n = (energy_level / energy_capacity).floor();
+
+        for _ in 0..n.unwrap() as usize {
+            result.push(Self {
+                id: NEXT_BUG_ID.fetch_add(1, Ordering::SeqCst),
+                chromosome: chromosome.clone(),
+                brain: features.brain.clone(),
+                last_brain_log: None,
+                position,
+                rotation,
+                size: features.size,
+                energy_level: energy_capacity,
+                birth_instant: now,
+                max_age: features.max_age,
+                color: features.color.clone(),
+                baby_charge_level: noneg_float(0.),
+                heat_level: noneg_float(0.),
+            });
+        }
+
+        let reminder = NoNeg::wrap(energy_level - energy_capacity * n).unwrap();
+
+        result.push(Self {
+            id: NEXT_BUG_ID.fetch_add(1, Ordering::SeqCst),
+            chromosome: chromosome.clone(),
+            brain: features.brain.clone(),
+            last_brain_log: None,
+            position,
+            rotation,
+            size: features.size,
+            energy_level: reminder,
+            birth_instant: now,
+            max_age: features.max_age,
+            color: features.color.clone(),
+            baby_charge_level: noneg_float(0.),
+            heat_level: noneg_float(0.),
+        });
+
+        result
+    }
+
     fn dst_to_bug(&self, other: &Bug) -> Float {
         (self.position - other.position).len()
     }
@@ -275,15 +330,14 @@ impl Bug {
         })
     }
 
-    fn reproduce_asexually<R: RngCore>(&self, rng: &mut R, now: TimePoint) -> Bug {
-        Bug::give_birth(
+    fn reproduce_asexually<R: RngCore>(&self, rng: &mut R, now: TimePoint) -> Vec<Bug> {
+        Bug::give_birth_to_twins(
             self.chromosome.mutated_ext(|_| 0.01..0.8, 0.01, rng),
             self.position,
             Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
             self.baby_charge_capacity(),
             now,
         )
-        .unwrap()
     }
 
     fn reproduce_sexually(&self, partner: &Bug) -> Bug {
@@ -448,10 +502,9 @@ impl Bug {
         }
 
         if self.baby_charge_level >= self.baby_charge_capacity() {
-            // give birth
-            requests.push(EnvironmentRequest::GiveBirth(
-                self.reproduce_asexually(rng, env.now().clone()),
-            ));
+            for baby in self.reproduce_asexually(rng, env.now().clone()) {
+                requests.push(EnvironmentRequest::GiveBirth(baby));
+            }
             self.baby_charge_level =
                 NoNeg::wrap(self.baby_charge_level - self.baby_charge_capacity()).unwrap();
         }
