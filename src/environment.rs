@@ -1,10 +1,16 @@
 use core::range::Range;
 use std::{
-    cell::{Ref, RefCell}, f64::consts::PI, sync::atomic::{AtomicUsize, Ordering}, time::Duration
+    cell::{Ref, RefCell},
+    f64::consts::PI,
+    sync::atomic::{AtomicUsize, Ordering},
+    time::Duration,
 };
 
 use crate::{
-    bug::Bug, math::{noneg_float, Angle, NoNeg, Point, Rect, Size}, time_point::TimePoint, utils::{sample_range_from_range, Float}
+    bug::Bug,
+    math::{noneg_float, Angle, NoNeg, Point, Rect, Size},
+    time_point::TimePoint,
+    utils::{sample_range_from_range, Float},
 };
 use chromosome::Chromosome;
 use rand::Rng;
@@ -124,12 +130,10 @@ pub struct Environment<T> {
 }
 
 impl<T> Environment<T> {
-    pub fn new(
-        now: T,
-        food: Vec<Food>,
-        food_sources: Vec<FoodSource<T>>,
-        bugs: Vec<Bug<T>>,
-    ) -> Self where T: Clone{
+    pub fn new(now: T, food: Vec<Food>, food_sources: Vec<FoodSource<T>>, bugs: Vec<Bug<T>>) -> Self
+    where
+        T: Clone,
+    {
         Self {
             food,
             food_sources,
@@ -151,7 +155,7 @@ impl<T> Environment<T> {
     ) -> Self
     where
         Range: Clone,
-        T: Clone
+        T: Clone,
     {
         Self {
             food: Food::generate_vec(rng, x_range, y_range, food_e_range, food_count),
@@ -200,7 +204,10 @@ impl<T> Environment<T> {
         &self.creation_time
     }
 
-    pub fn proceed<R: RngCore>(&mut self, dt: Duration, rng: &mut R) where T: TimePoint + Clone {
+    pub fn proceed<R: RngCore>(&mut self, dt: Duration, rng: &mut R)
+    where
+        T: TimePoint + Clone,
+    {
         self.now += dt;
 
         for food_source in &mut self.food_sources {

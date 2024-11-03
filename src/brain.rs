@@ -1,6 +1,6 @@
 use crate::{
     math::{self, Angle, DeltaAngle, NoNeg},
-    utils::{self, Color, Float},
+    utils::{self, Color, Float, RequiredToBeInRange as _},
 };
 use chromosome::Chromosome;
 use core::range::Range;
@@ -42,14 +42,16 @@ pub struct Input {
     pub energy_level: NoNeg<Float>,
     pub energy_capacity: NoNeg<Float>,
     pub rotation: Angle<Float>,
-    pub proximity_to_food: Float,
-    pub direction_to_nearest_food: Angle<Float>,
+    pub proximity_to_food: Option<NoNeg<Float>>,
+    pub direction_to_nearest_food: Option<Angle<Float>>,
+    pub size_of_nearest_food: Option<NoNeg<Float>>,
     pub age: NoNeg<Float>,
-    pub proximity_to_bug: Float,
-    pub direction_to_nearest_bug: Angle<Float>,
-    pub color_of_nearest_bug: Color,
+    pub proximity_to_bug: Option<NoNeg<Float>>,
+    pub direction_to_nearest_bug: Option<Angle<Float>>,
+    pub color_of_nearest_bug: Option<Color>,
     pub baby_charge_level: NoNeg<Float>,
     pub baby_charge_capacity: NoNeg<Float>,
+    pub vision_range: NoNeg<Float>,
 }
 
 #[derive(Debug, Clone)]
@@ -71,32 +73,32 @@ pub(crate) struct VerboseOutput {
 
 impl From<Input> for [Float; 16] {
     fn from(value: Input) -> Self {
-        utils::normalize([
+        [
             (value.energy_level / value.energy_capacity).unwrap(),
-            normalizers::sigmoid(value.proximity_to_food / 100.),
-            delta_angle_to_activation(
+            value.proximity_to_food.map(|x| (x / value.vision_range).unwrap()).unwrap_or(1.),
+            value.direction_to_nearest_food.map(|d| delta_angle_to_activation(
                 value
                     .rotation
-                    .signed_distance(value.direction_to_nearest_food),
-            ),
+                    .signed_distance(d),
+            )).unwrap_or(0.),
+            value.size_of_nearest_food.map(|x| x.unwrap() / 32.).unwrap_or(1.),
             value.age.unwrap(),
-            normalizers::sigmoid(value.proximity_to_bug / 100.),
-            delta_angle_to_activation(
+            value.proximity_to_bug.map(|p| (p / value.vision_range).unwrap()).unwrap_or(1.),
+            value.direction_to_nearest_bug.map(|d| delta_angle_to_activation(
                 value
                     .rotation
-                    .signed_distance(value.direction_to_nearest_bug),
-            ),
-            value.color_of_nearest_bug.a,
-            value.color_of_nearest_bug.r,
-            value.color_of_nearest_bug.g,
-            value.color_of_nearest_bug.b,
+                    .signed_distance(d),
+            )).unwrap_or(0.),
+            value.color_of_nearest_bug.as_ref().map(|x|x.a).unwrap_or(0.),
+            value.color_of_nearest_bug.as_ref().map(|x|x.r).unwrap_or(0.),
+            value.color_of_nearest_bug.as_ref().map(|x|x.g).unwrap_or(0.),
+            value.color_of_nearest_bug.as_ref().map(|x|x.b).unwrap_or(0.),
             value.baby_charge_level.unwrap() / value.baby_charge_capacity.unwrap(),
             0.,
             0.,
             0.,
             0.,
-            0.,
-        ])
+        ].required_to_be_in_range(-1. ..=1.).unwrap()
     }
 }
 

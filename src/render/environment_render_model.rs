@@ -198,6 +198,15 @@ impl EnvironmentRenderModel {
                                 Color::RGB(255, 183, 195),
                             )
                             .unwrap();
+
+                        canvas
+                            .circle(
+                                *position.x() as i16,
+                                *position.y() as i16,
+                                (bug.vision_range().unwrap() * scale) as i16,
+                                Color::RGB(255, 183, 3),
+                            )
+                            .unwrap();
                     }
                 }
             }

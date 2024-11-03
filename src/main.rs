@@ -3,10 +3,10 @@
 
 use app_utils::color_to_slint_rgba_color;
 use bugs::environment::{Environment, FoodSourceCreateInfo};
-use bugs::math::Point;
-use bugs::utils::Float;
+use bugs::math::{noneg_float, Angle, Point};
+use bugs::utils::{pretty_duration, Color, Float};
 use render::{BrainRenderModel, Camera, EnvironmentRenderModel};
-use slint::{ComponentHandle, PlatformError, Timer, TimerMode};
+use slint::{ComponentHandle, PlatformError, SharedString, Timer, TimerMode};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -37,7 +37,6 @@ pub fn main() -> Result<(), PlatformError> {
         environment: Environment::generate(
             Instant::now(),
             &mut rng,
-
             // max energy increases by 2^x, and spawn interval increases by 3^x
             vec![
                 FoodSourceCreateInfo {
@@ -272,11 +271,13 @@ pub fn main() -> Result<(), PlatformError> {
                 );
                 window.set_env_canvas(texture);
                 window.set_env_info(EnvInfo {
-                    now: state
-                        .environment
-                        .now()
-                        .duration_since(state.environment.creation_time().clone())
-                        .as_millis() as i64,
+                    now: pretty_duration(
+                        state
+                            .environment
+                            .now()
+                            .duration_since(state.environment.creation_time().clone()),
+                    )
+                    .into(),
                     pause: state.pause,
                     time_speed: state.time_speed as f32,
                     bugs_count: state.environment.bugs_count() as i32,
@@ -310,6 +311,7 @@ pub fn main() -> Result<(), PlatformError> {
                         y: *bug.position().y() as f32,
                         heat_capacity: bug.heat_capacity().unwrap() as f32,
                         heat_level: bug.heat_level().unwrap() as f32,
+                        vision_range: bug.vision_range().unwrap() as f32,
                     });
 
                     if let Some(brain_log) = bug.last_brain_log() {
@@ -325,30 +327,23 @@ pub fn main() -> Result<(), PlatformError> {
 
                         window.set_selected_bug_last_brain_log(BugBrainLog {
                             input: BugBrainInput {
-                                age: brain_log.input.age.unwrap() as f32,
-                                relative_baby_charge: (brain_log.input.baby_charge_level.unwrap()
-                                    / brain_log.input.baby_charge_capacity.unwrap())
-                                    as f32,
                                 color_of_nearest_bug: color_to_slint_rgba_color(
-                                    &brain_log.input.color_of_nearest_bug,
+                                    &brain_log.input.color_of_nearest_bug.as_ref().unwrap_or(&Color {a: 0.,r: 0.,g: 0.,b: 0.}),
                                 )
                                 .into(),
                                 direction_to_nearest_bug: brain_log
                                     .input
-                                    .direction_to_nearest_bug
+                                    .direction_to_nearest_bug.unwrap_or(Angle::from_radians(0.))
                                     .degrees()
                                     as f32,
                                 direction_to_nearest_food: brain_log
                                     .input
-                                    .direction_to_nearest_food
+                                    .direction_to_nearest_food.unwrap_or(Angle::from_radians(0.))
                                     .degrees()
                                     as f32,
-                                relative_energy: (brain_log.input.energy_level.unwrap()
-                                    / brain_log.input.energy_capacity.unwrap())
-                                    as f32,
                                 rotation: brain_log.input.rotation.degrees() as f32,
-                                proximity_to_bug: brain_log.input.proximity_to_bug as f32,
-                                proximity_to_food: brain_log.input.proximity_to_food as f32,
+                                proximity_to_bug: brain_log.input.proximity_to_bug.unwrap_or(noneg_float(1.)).unwrap() as f32,
+                                proximity_to_food: brain_log.input.proximity_to_food.unwrap_or(noneg_float(1.)).unwrap() as f32,
                             },
                             output: BugBrainOutput {
                                 baby_charging_rate: brain_log.output.baby_charging_rate.unwrap()

@@ -1,15 +1,12 @@
 import { Slider, GroupBox, HorizontalBox, VerticalBox, GridBox } from "std-widgets.slint";
 
 export struct BugBrainInput {
-    relative-energy: float,
     rotation: angle,
     proximity-to-food: float,
     direction-to-nearest-food: float,
-    age: float,
     proximity-to-bug: float,
     direction-to-nearest-bug: float,
     color-of-nearest-bug: color,
-    relative-baby-charge: float,
 }
 
 export struct BugBrainOutput {
@@ -39,11 +36,11 @@ export struct BugInfo  {
     baby-charge-capacity: float,
     heat-level: float,
     heat-capacity: float,
+    vision-range: float,
 }
 
 export struct EnvInfo {
-    // seconds from start of experiment
-    now: duration,
+    now: string,
     time-speed: float,
     pause: bool,
     bugs-count: int,
@@ -106,7 +103,7 @@ export component MainWindow inherits Window {
 
             Text {
                 font-size: 14px;
-                text: "time since start: \{(root.env-info.now/1s).round()}s";
+                text: "time since start: \{root.env-info.now}";
             }
 
             Text {
@@ -182,12 +179,12 @@ export component MainWindow inherits Window {
 
             Text {
                 font-size: 14px;
-                text: "Brain input:";
+                text: "vision range: \{(root.selected-bug-info.vision-range * 100).round() / 100}";
             }
 
             Text {
                 font-size: 14px;
-                text: "         energy_level: \{(root.selected-bug-last-brain-log.input.relative-energy * 100).round() / 100}";
+                text: "Brain input:";
             }
 
             Text {
@@ -207,11 +204,6 @@ export component MainWindow inherits Window {
 
             Text {
                 font-size: 14px;
-                text: "         age: " + root.selected-bug-last-brain-log.input.age;
-            }
-
-            Text {
-                font-size: 14px;
                 text: "         proximity_to_bug: " + root.selected-bug-last-brain-log.input.proximity_to_bug;
             }
 
@@ -223,11 +215,6 @@ export component MainWindow inherits Window {
             Text {
                 font-size: 14px;
                 text: "         color_of_nearest_bug: \{Utils.color-to-string(root.selected-bug-last-brain-log.input.color_of_nearest_bug)}";
-            }
-
-            Text {
-                font-size: 14px;
-                text: "         baby_charge: \{(root.selected-bug-last-brain-log.input.relative-baby-charge * 100).round()/100}";
             }
 
             Text {
@@ -274,10 +261,12 @@ export component MainWindow inherits Window {
                         ? #8f2d56          // max age
                         : index < 210
                         ? #8ffd56          // max size
-                        : index < 213
-                        ? #218380          // color
+                        : index < 211
+                        ? #ffb703          // vision range
+                        : index < 214
+                        ? #f354be          // color
 
-                        : #73d2de;         // not used
+                        : #c7c7c7;         // not used
 
                     /**
                         0..208   - brain

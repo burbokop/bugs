@@ -365,8 +365,8 @@ impl BrainRenderModel {
                 &mut canvas,
                 &font,
                 [
-                    "E/C", "FP/", "R-F", "A", "BP/", "R-B", "a", "r", "g", "b", "B/C", "R0", "R1",
-                    "R2", "R3", "R4",
+                    "E/C", "FP/", "R-F", "FS", "A", "BP/", "R-B", "a", "r", "g", "b", "B/C", "R0",
+                    "R1", "R2", "R3",
                 ],
                 max_width,
                 selected_node,

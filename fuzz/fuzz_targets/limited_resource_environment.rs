@@ -1,6 +1,4 @@
 #![no_main]
-#![feature(duration_constructors)]
-#![feature(duration_millis_float)]
 
 use std::{f64::consts::PI, ops::AddAssign, time::{Duration, SystemTime}};
 
@@ -14,24 +12,8 @@ use libfuzzer_sys::fuzz_target;
 use rand::Rng as _;
 use rand_pcg::Pcg64;
 use rand_seeder::Seeder;
-
-fn pretty_duration(duration: Duration) -> String {
-    if duration > Duration::from_hours(1) {
-        return format!("{:.2} h", duration.as_secs_f64() / 60. / 60.);
-    } else if duration > Duration::from_mins(1) {
-        return format!("{:.2} m", duration.as_secs_f64() / 60.);
-    } else if duration > Duration::from_secs(1) {
-        return format!("{:.2} s", duration.as_millis_f64() / 1000.);
-    } else if duration > Duration::from_millis(1) {
-        return format!("{:.2} ms", duration.as_micros() as f64 / 1000.);
-    } else if duration > Duration::from_micros(1) {
-        return format!("{:.2} µs", duration.as_nanos() as f64 / 1000.);
-    } else {
-        return format!("{} ns", duration.as_nanos());
-    }
-}
-
 use bugs::time_point::TimePoint;
+use bugs::utils::pretty_duration;
 
 #[derive(Clone)]
 struct FakeTime (SystemTime);

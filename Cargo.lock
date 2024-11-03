@@ -3429,7 +3429,7 @@ checksum = "d66dc143e6b11c1eddc06d5c423cfc97062865baf299914ab64caa38182078fe"
 [[package]]
 name = "simple_neural_net"
 version = "0.0.1"
-source = "git+https://github.com/burbokop/simple_neural_net.git#f6d9e90d1605a8697f483ec203334e3ae4e5cab6"
+source = "git+https://github.com/burbokop/simple_neural_net.git#d19e46fa0688cd4e650809f32772e282d441f82c"
 dependencies = [
  "rand",
  "serde",
@@ -3439,7 +3439,7 @@ dependencies = [
 [[package]]
 name = "simple_neural_net_macro"
 version = "0.0.1"
-source = "git+https://github.com/burbokop/simple_neural_net.git#f6d9e90d1605a8697f483ec203334e3ae4e5cab6"
+source = "git+https://github.com/burbokop/simple_neural_net.git#d19e46fa0688cd4e650809f32772e282d441f82c"
 dependencies = [
  "proc-macro2",
  "quote",

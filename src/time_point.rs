@@ -1,4 +1,7 @@
-use std::{ops::AddAssign, time::{Duration, Instant}};
+use std::{
+    ops::AddAssign,
+    time::{Duration, Instant},
+};
 
 pub trait TimePoint: AddAssign<Duration> {
     fn duration_since(&self, other: &Self) -> Duration;
