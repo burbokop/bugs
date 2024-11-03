@@ -37,36 +37,44 @@ pub fn main() -> Result<(), PlatformError> {
         environment: Environment::generate(
             Instant::now(),
             &mut rng,
+
+            // max energy increases by 2^x, and spawn interval increases by 3^x
             vec![
                 FoodSourceCreateInfo {
                     position: (0., 0.).into(),
                     size: (1000., 1000.).into(),
                     energy_range: (0. ..1.).into(),
-                    spawn_interval: Duration::from_millis(500),
+                    spawn_interval: Duration::from_millis((4_u64).pow(0) * 1000),
                 },
                 FoodSourceCreateInfo {
-                    position: (0., 2000.).into(),
+                    position: (0., 0.).into(),
                     size: (2000., 2000.).into(),
                     energy_range: (0. ..2.).into(),
-                    spawn_interval: Duration::from_millis(2000 * 10),
+                    spawn_interval: Duration::from_millis((4_u64).pow(1) * 1000),
                 },
                 FoodSourceCreateInfo {
-                    position: (-2000., 0.).into(),
-                    size: (2000., 2000.).into(),
+                    position: (0., 0.).into(),
+                    size: (4000., 4000.).into(),
+                    energy_range: (0. ..4.).into(),
+                    spawn_interval: Duration::from_millis((4_u64).pow(2) * 1000),
+                },
+                FoodSourceCreateInfo {
+                    position: (0., 0.).into(),
+                    size: (16000., 16000.).into(),
                     energy_range: (0. ..8.).into(),
-                    spawn_interval: Duration::from_millis(8000 * 10),
+                    spawn_interval: Duration::from_millis((4_u64).pow(3) * 1000),
                 },
                 FoodSourceCreateInfo {
-                    position: (0., -2000.).into(),
-                    size: (2000., 2000.).into(),
+                    position: (0., 0.).into(),
+                    size: (32000., 32000.).into(),
+                    energy_range: (0. ..16.).into(),
+                    spawn_interval: Duration::from_millis((4_u64).pow(4) * 1000),
+                },
+                FoodSourceCreateInfo {
+                    position: (0., 0.).into(),
+                    size: (64000., 64000.).into(),
                     energy_range: (0. ..32.).into(),
-                    spawn_interval: Duration::from_millis(32000 * 10),
-                },
-                FoodSourceCreateInfo {
-                    position: (2000., 0.).into(),
-                    size: (2000., 2000.).into(),
-                    energy_range: (0. ..128.).into(),
-                    spawn_interval: Duration::from_millis(128000 * 10),
+                    spawn_interval: Duration::from_millis((4_u64).pow(5) * 1000),
                 },
             ],
             -1000. ..1000.,

@@ -1,6 +1,5 @@
 use std::{
     ops::{Add, AddAssign, Div, Mul, Rem, Sub},
-    process::Output,
 };
 
 use super::{Abs, Cos, NoNeg, Pi, RemEuclid, Sin, Two, Zero};
