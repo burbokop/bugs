@@ -1,6 +1,6 @@
 use std::ops::{Add, Mul};
 
-use super::{Angle, Atan2, Sqr, Sqrt};
+use super::{Abs, Angle, Atan2, Sqr, Sqrt};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Vector<T> {
@@ -31,14 +31,22 @@ where
     }
 }
 
-impl<T> Vector<T>
-where
-    T: Sqr,
-    <T as Sqr>::Output: Add,
-    <<T as Sqr>::Output as Add>::Output: Sqrt,
-{
-    pub fn len(self) -> <<<T as Sqr>::Output as Add>::Output as Sqrt>::Output {
+impl<T> Vector<T> {
+    pub fn len(self) -> <<<T as Sqr>::Output as Add>::Output as Sqrt>::Output
+    where
+        T: Sqr,
+        <T as Sqr>::Output: Add,
+        <<T as Sqr>::Output as Add>::Output: Sqrt,
+    {
         (self.x.sqr() + self.y.sqr()).sqrt()
+    }
+
+    pub fn manhattan_len(self) -> <<T as Abs>::Output as Add>::Output
+    where
+        T: Abs,
+        <T as Abs>::Output: Add,
+    {
+        self.x.abs() + self.y.abs()
     }
 }
 

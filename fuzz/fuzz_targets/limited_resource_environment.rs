@@ -1,7 +1,13 @@
 #![no_main]
 
-use std::{f64::consts::PI, ops::AddAssign, time::{Duration, SystemTime}};
+use std::{
+    f64::consts::PI,
+    ops::AddAssign,
+    time::{Duration, SystemTime},
+};
 
+use bugs::time_point::TimePoint;
+use bugs::utils::pretty_duration;
 use bugs::{
     bug::Bug,
     environment::{Environment, Food},
@@ -12,15 +18,13 @@ use libfuzzer_sys::fuzz_target;
 use rand::Rng as _;
 use rand_pcg::Pcg64;
 use rand_seeder::Seeder;
-use bugs::time_point::TimePoint;
-use bugs::utils::pretty_duration;
 
 #[derive(Clone)]
-struct FakeTime (SystemTime);
+struct FakeTime(SystemTime);
 
 impl TimePoint for FakeTime {
     fn duration_since(&self, other: &Self) -> Duration {
-       self.0.duration_since(other.0).unwrap()
+        self.0.duration_since(other.0).unwrap()
     }
 }
 
@@ -68,11 +72,7 @@ fuzz_target!(|data: &[u8]| {
             println!(
                 "iteration {}, time: {}, population: {}, food: {}",
                 i,
-                pretty_duration(
-                    environment
-                        .now()
-                        .duration_since(&the_beginning_of_times)
-                ),
+                pretty_duration(environment.now().duration_since(&the_beginning_of_times)),
                 environment.bugs_count(),
                 environment.food().len()
             );

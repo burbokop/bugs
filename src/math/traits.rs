@@ -126,7 +126,7 @@ impl RemEuclid for f64 {
     }
 }
 
-pub(crate) trait Abs {
+pub trait Abs {
     type Output;
     fn abs(self) -> Self::Output;
 }

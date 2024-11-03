@@ -328,22 +328,41 @@ pub fn main() -> Result<(), PlatformError> {
                         window.set_selected_bug_last_brain_log(BugBrainLog {
                             input: BugBrainInput {
                                 color_of_nearest_bug: color_to_slint_rgba_color(
-                                    &brain_log.input.color_of_nearest_bug.as_ref().unwrap_or(&Color {a: 0.,r: 0.,g: 0.,b: 0.}),
+                                    &brain_log.input.color_of_nearest_bug.as_ref().unwrap_or(
+                                        &Color {
+                                            a: 0.,
+                                            r: 0.,
+                                            g: 0.,
+                                            b: 0.,
+                                        },
+                                    ),
                                 )
                                 .into(),
                                 direction_to_nearest_bug: brain_log
                                     .input
-                                    .direction_to_nearest_bug.unwrap_or(Angle::from_radians(0.))
+                                    .direction_to_nearest_bug
+                                    .unwrap_or(Angle::from_radians(0.))
                                     .degrees()
                                     as f32,
                                 direction_to_nearest_food: brain_log
                                     .input
-                                    .direction_to_nearest_food.unwrap_or(Angle::from_radians(0.))
+                                    .direction_to_nearest_food
+                                    .unwrap_or(Angle::from_radians(0.))
                                     .degrees()
                                     as f32,
                                 rotation: brain_log.input.rotation.degrees() as f32,
-                                proximity_to_bug: brain_log.input.proximity_to_bug.unwrap_or(noneg_float(1.)).unwrap() as f32,
-                                proximity_to_food: brain_log.input.proximity_to_food.unwrap_or(noneg_float(1.)).unwrap() as f32,
+                                proximity_to_bug: brain_log
+                                    .input
+                                    .proximity_to_bug
+                                    .unwrap_or(noneg_float(1.))
+                                    .unwrap()
+                                    as f32,
+                                proximity_to_food: brain_log
+                                    .input
+                                    .proximity_to_food
+                                    .unwrap_or(noneg_float(1.))
+                                    .unwrap()
+                                    as f32,
                             },
                             output: BugBrainOutput {
                                 baby_charging_rate: brain_log.output.baby_charging_rate.unwrap()

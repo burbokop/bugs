@@ -1,5 +1,10 @@
 use core::range::Range;
-use std::{error::Error, fmt::{Debug, Display}, ops::RangeBounds, time::{Duration, SystemTime}};
+use std::{
+    error::Error,
+    fmt::{Debug, Display},
+    ops::RangeBounds,
+    time::{Duration, SystemTime},
+};
 
 use rand::distributions::uniform::{SampleRange, SampleUniform};
 use serde::de::value;
@@ -22,8 +27,13 @@ pub(crate) fn normalize<const SIZE: usize>(v: [Float; SIZE]) -> [Float; SIZE] {
 }
 
 pub(crate) fn normalize_opt<const SIZE: usize>(v: [Option<Float>; SIZE]) -> [Option<Float>; SIZE] {
-    let max = v.iter().cloned().filter_map(|x|x).reduce(Float::max).unwrap();
-    v.map(|x| x.map(|x|x/ max) )
+    let max = v
+        .iter()
+        .cloned()
+        .filter_map(|x| x)
+        .reduce(Float::max)
+        .unwrap();
+    v.map(|x| x.map(|x| x / max))
 }
 
 pub(crate) fn transfer_energy(
@@ -80,47 +90,54 @@ pub fn pretty_duration(duration: Duration) -> String {
     }
 }
 
-
-
 #[derive(Debug, Clone)]
 pub(crate) struct RequiredToBeInRangeError<T, R> {
     value: T,
-    range: R
+    range: R,
 }
 
-impl<T, R> Display for RequiredToBeInRangeError<T, R>{
+impl<T, R> Display for RequiredToBeInRangeError<T, R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         todo!()
     }
 }
 
-impl<T: Debug, R: Debug> Error for RequiredToBeInRangeError<T, R> {
-
-}
+impl<T: Debug, R: Debug> Error for RequiredToBeInRangeError<T, R> {}
 
 pub(crate) trait RequiredToBeInRange: Sized {
     type RangeItem;
-    fn required_to_be_in_range<R: RangeBounds<Self::RangeItem>>(self, range: R) -> Result<Self, RequiredToBeInRangeError<Self, R>>;
+    fn required_to_be_in_range<R: RangeBounds<Self::RangeItem>>(
+        self,
+        range: R,
+    ) -> Result<Self, RequiredToBeInRangeError<Self, R>>;
 }
-
 
 impl RequiredToBeInRange for f64 {
     type RangeItem = f64;
-    fn required_to_be_in_range<R: RangeBounds<Self::RangeItem>>(self, range: R) -> Result<Self, RequiredToBeInRangeError<Self, R>> {
+    fn required_to_be_in_range<R: RangeBounds<Self::RangeItem>>(
+        self,
+        range: R,
+    ) -> Result<Self, RequiredToBeInRangeError<Self, R>> {
         if range.contains(&self) {
             Ok(self)
         } else {
-            Err(RequiredToBeInRangeError { value: self, range: range })
+            Err(RequiredToBeInRangeError {
+                value: self,
+                range: range,
+            })
         }
     }
 }
 
 impl<T: PartialOrd, const SIZE: usize> RequiredToBeInRange for [T; SIZE] {
     type RangeItem = T;
-    fn required_to_be_in_range<R: RangeBounds<Self::RangeItem>>(self, range: R) -> Result<Self, RequiredToBeInRangeError<Self, R>> {
+    fn required_to_be_in_range<R: RangeBounds<Self::RangeItem>>(
+        self,
+        range: R,
+    ) -> Result<Self, RequiredToBeInRangeError<Self, R>> {
         for v in &self {
             if !range.contains(v) {
-                return Err(RequiredToBeInRangeError { value: self, range })
+                return Err(RequiredToBeInRangeError { value: self, range });
             }
         }
         Ok(self)

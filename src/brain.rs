@@ -75,30 +75,55 @@ impl From<Input> for [Float; 16] {
     fn from(value: Input) -> Self {
         [
             (value.energy_level / value.energy_capacity).unwrap(),
-            value.proximity_to_food.map(|x| (x / value.vision_range).unwrap()).unwrap_or(1.),
-            value.direction_to_nearest_food.map(|d| delta_angle_to_activation(
-                value
-                    .rotation
-                    .signed_distance(d),
-            )).unwrap_or(0.),
-            value.size_of_nearest_food.map(|x| x.unwrap() / 32.).unwrap_or(1.),
+            value
+                .proximity_to_food
+                .map(|x| (x / value.vision_range).unwrap())
+                .unwrap_or(1.),
+            value
+                .direction_to_nearest_food
+                .map(|d| delta_angle_to_activation(value.rotation.signed_distance(d)))
+                .unwrap_or(0.),
+            value
+                .size_of_nearest_food
+                .map(|x| x.unwrap() / 32.)
+                .unwrap_or(1.),
             value.age.unwrap(),
-            value.proximity_to_bug.map(|p| (p / value.vision_range).unwrap()).unwrap_or(1.),
-            value.direction_to_nearest_bug.map(|d| delta_angle_to_activation(
-                value
-                    .rotation
-                    .signed_distance(d),
-            )).unwrap_or(0.),
-            value.color_of_nearest_bug.as_ref().map(|x|x.a).unwrap_or(0.),
-            value.color_of_nearest_bug.as_ref().map(|x|x.r).unwrap_or(0.),
-            value.color_of_nearest_bug.as_ref().map(|x|x.g).unwrap_or(0.),
-            value.color_of_nearest_bug.as_ref().map(|x|x.b).unwrap_or(0.),
+            value
+                .proximity_to_bug
+                .map(|p| (p / value.vision_range).unwrap())
+                .unwrap_or(1.),
+            value
+                .direction_to_nearest_bug
+                .map(|d| delta_angle_to_activation(value.rotation.signed_distance(d)))
+                .unwrap_or(0.),
+            value
+                .color_of_nearest_bug
+                .as_ref()
+                .map(|x| x.a)
+                .unwrap_or(0.),
+            value
+                .color_of_nearest_bug
+                .as_ref()
+                .map(|x| x.r)
+                .unwrap_or(0.),
+            value
+                .color_of_nearest_bug
+                .as_ref()
+                .map(|x| x.g)
+                .unwrap_or(0.),
+            value
+                .color_of_nearest_bug
+                .as_ref()
+                .map(|x| x.b)
+                .unwrap_or(0.),
             value.baby_charge_level.unwrap() / value.baby_charge_capacity.unwrap(),
             0.,
             0.,
             0.,
             0.,
-        ].required_to_be_in_range(-1. ..=1.).unwrap()
+        ]
+        .required_to_be_in_range(-1. ..=1.)
+        .unwrap()
     }
 }
 

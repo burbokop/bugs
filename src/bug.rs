@@ -35,32 +35,21 @@ mod capacity {
     };
 
     static BUG_ENERGY_CAPACITY_PER_SIZE: NoNeg<Float> = noneg_float(100.);
-    static BUG_BABY_CHARGE_CAPACITY_PER_SIZE: NoNeg<Float> = noneg_float(1.);
     static BUG_HEAT_CAPACITY_PER_SIZE: NoNeg<Float> = noneg_float(1000.);
 
     pub fn energy_capacity(size: NoNeg<Float>) -> NoNeg<Float> {
         size * BUG_ENERGY_CAPACITY_PER_SIZE
     }
 
-    pub fn baby_charge_capacity(size: NoNeg<Float>) -> NoNeg<Float> {
-        size * BUG_BABY_CHARGE_CAPACITY_PER_SIZE
+    pub fn baby_charge_capacity(
+        size: NoNeg<Float>,
+        baby_charge_capacity_per_size: NoNeg<Float>,
+    ) -> NoNeg<Float> {
+        size * baby_charge_capacity_per_size
     }
 
     pub fn heat_capacity(size: NoNeg<Float>) -> NoNeg<Float> {
         size * BUG_HEAT_CAPACITY_PER_SIZE
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use crate::bug::capacity::{
-            BUG_BABY_CHARGE_CAPACITY_PER_SIZE, BUG_ENERGY_CAPACITY_PER_SIZE,
-        };
-
-        #[test]
-        fn capacity_per_size() {
-            // Because if BUG_BABY_CHARGE_CAPACITY_PER_SIZE > BUG_ENERGY_CAPACITY_PER_SIZE then newly born bug will exceed its energy capacity
-            assert!(BUG_BABY_CHARGE_CAPACITY_PER_SIZE <= BUG_ENERGY_CAPACITY_PER_SIZE);
-        }
     }
 }
 
@@ -83,6 +72,7 @@ pub struct Bug<T> {
     max_age: Duration,
     color: Color,
     baby_charge_level: NoNeg<Float>,
+    baby_charge_capacity_per_size: NoNeg<Float>,
     heat_level: NoNeg<Float>,
     vision_range: NoNeg<Float>,
 }
@@ -104,6 +94,7 @@ struct GeneticFeatures {
     size: NoNeg<Float>,
     color: Color,
     vision_range: NoNeg<Float>,
+    baby_charge_capacity_per_size: NoNeg<Float>,
 }
 
 impl GeneticFeatures {
@@ -113,12 +104,13 @@ impl GeneticFeatures {
         let max_age =
             Duration::from_secs_f64(body_genes[0].abs() * body_genes[1].abs() * 60. * 60. * 24.);
         let size = body_genes[1].abs_as_noneg();
-        let vision_range = body_genes[2].abs_as_noneg() * noneg_float(100.);
+        let baby_charge_capacity_per_size = body_genes[2].abs_as_noneg();
+        let vision_range = body_genes[3].abs_as_noneg() * noneg_float(100.);
         let color = Color {
             a: 1.,
-            r: body_genes[3].rem_euclid(1.),
-            g: body_genes[4].rem_euclid(1.),
-            b: body_genes[5].rem_euclid(1.),
+            r: body_genes[4].rem_euclid(1.),
+            g: body_genes[5].rem_euclid(1.),
+            b: body_genes[6].rem_euclid(1.),
         };
 
         GeneticFeatures {
@@ -127,6 +119,7 @@ impl GeneticFeatures {
             size,
             color,
             vision_range,
+            baby_charge_capacity_per_size,
         }
     }
 }
@@ -188,7 +181,7 @@ impl<T> Bug<T> {
     }
 
     pub fn baby_charge_capacity(&self) -> NoNeg<Float> {
-        capacity::baby_charge_capacity(self.size)
+        capacity::baby_charge_capacity(self.size, self.baby_charge_capacity_per_size)
     }
 
     pub fn heat_level(&self) -> NoNeg<Float> {
@@ -225,6 +218,7 @@ impl<T> Bug<T> {
             max_age: features.max_age,
             color: features.color,
             baby_charge_level: noneg_float(0.),
+            baby_charge_capacity_per_size: features.baby_charge_capacity_per_size,
             heat_level: noneg_float(0.),
             vision_range: features.vision_range,
         };
@@ -257,6 +251,7 @@ impl<T> Bug<T> {
             max_age: features.max_age,
             color: features.color,
             baby_charge_level: noneg_float(0.),
+            baby_charge_capacity_per_size: features.baby_charge_capacity_per_size,
             heat_level: noneg_float(0.),
             vision_range: features.vision_range,
         }
@@ -293,6 +288,7 @@ impl<T> Bug<T> {
                 max_age: features.max_age,
                 color: features.color.clone(),
                 baby_charge_level: noneg_float(0.),
+                baby_charge_capacity_per_size: features.baby_charge_capacity_per_size,
                 heat_level: noneg_float(0.),
                 vision_range: features.vision_range,
             });
@@ -313,6 +309,7 @@ impl<T> Bug<T> {
             max_age: features.max_age,
             color: features.color.clone(),
             baby_charge_level: noneg_float(0.),
+            baby_charge_capacity_per_size: features.baby_charge_capacity_per_size,
             heat_level: noneg_float(0.),
             vision_range: features.vision_range,
         });
@@ -321,11 +318,15 @@ impl<T> Bug<T> {
     }
 
     fn dst_to_bug(&self, other: &Self) -> NoNeg<Float> {
-        NoNeg::wrap ( (self.position - other.position).len() ) .unwrap()
+        NoNeg::wrap((self.position - other.position).len()).unwrap()
     }
 
     fn dst_to_food(&self, other: &Food) -> NoNeg<Float> {
-       NoNeg::wrap ( (self.position - other.position()).len()).unwrap()
+        NoNeg::wrap((self.position - other.position()).len()).unwrap()
+    }
+
+    fn manhattan_dst_to_food(&self, other: &Food) -> NoNeg<Float> {
+        NoNeg::wrap((self.position - other.position()).manhattan_len()).unwrap()
     }
 
     /// return in redians
@@ -338,20 +339,31 @@ impl<T> Bug<T> {
         (self.position - other.position()).angle()
     }
 
-    fn find_nearest_bug<'a>(&self, env: &'a Environment<T>) -> Option<Ref<'a, Self>> {
-        env.bugs().filter(|o|  self.dst_to_bug(o) < self.vision_range).min_by(|a, b| {
-            self.dst_to_bug(a.deref())
-                .partial_cmp(&self.dst_to_bug(b.deref()))
-                .unwrap()
-        })
+    pub fn find_nearest_bug<'a>(&self, env: &'a Environment<T>) -> Option<Ref<'a, Self>> {
+        env.bugs()
+            .filter(|o| self.dst_to_bug(o) < self.vision_range)
+            .min_by(|a, b| {
+                self.dst_to_bug(a.deref())
+                    .partial_cmp(&self.dst_to_bug(b.deref()))
+                    .unwrap()
+            })
     }
 
-    fn find_nearest_food<'a>(&self, env: &'a Environment<T>) -> Option<&'a Food> {
-        env.food().iter().filter(|f|  self.dst_to_food(f) < self.vision_range).min_by(|a, b| {
-            self.dst_to_food(a)
-                .partial_cmp(&&self.dst_to_food(b))
-                .unwrap()
-        })
+    pub fn find_nearest_food<'a>(
+        &self,
+        env: &'a Environment<T>,
+    ) -> Option<(&'a Food, NoNeg<Float>)> {
+        env.food()
+            .iter()
+            .filter_map(|f| {
+                let dst = self.dst_to_food(f);
+                if dst < self.vision_range {
+                    Some((f, dst))
+                } else {
+                    None
+                }
+            })
+            .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
     }
 
     fn reproduce_asexually<R: RngCore>(&self, rng: &mut R, now: T) -> Vec<Self>
@@ -391,132 +403,145 @@ impl<T> Bug<T> {
     where
         T: TimePoint + Clone,
     {
-        let nearest_food = self.find_nearest_food(env);
-        let proximity_to_food = nearest_food.map(            |x| self.dst_to_food(x)        );
-        let direction_to_nearest_food = nearest_food.map(|x|self.direction_to_food(x));
-        let size_of_nearest_food = nearest_food.map(|x|x.energy());
+        let mut requests: Vec<EnvironmentRequest<T>> = Default::default();
         let age = self.age(env.now().clone());
+        if age <= noneg_float(1.) {
+            struct NearestFoodInfo<'a> {
+                food: &'a Food,
+                dst: NoNeg<Float>,
+                direction: Angle<Float>,
+                size: NoNeg<Float>,
+            }
 
-        let nearest_bug = self.find_nearest_bug(env);
-        let proximity_to_bug = nearest_bug.as_ref().map(|x|self.dst_to_bug(&x));
-        let direction_to_nearest_bug = nearest_bug.as_ref().map(|x|self.direction_to_bug(&x));
-        let color_of_nearest_bug = nearest_bug.as_ref().map(|x|x.color.clone());
+            let nearest_food = self
+                .find_nearest_food(env)
+                .map(|(food, dst)| NearestFoodInfo {
+                    food,
+                    dst,
+                    direction: self.direction_to_food(food),
+                    size: food.energy(),
+                });
 
-        let brain_input = brain::Input {
-            energy_level: self.energy_level,
-            energy_capacity: self.energy_capacity(),
-            rotation: self.rotation,
-            proximity_to_food,
-            direction_to_nearest_food,
-            size_of_nearest_food,
-            age,
-            proximity_to_bug,
-            direction_to_nearest_bug,
-            color_of_nearest_bug,
-            baby_charge_level: self.baby_charge_level,
-            baby_charge_capacity: self.baby_charge_capacity(),
-            vision_range: self.vision_range
-        };
+            let nearest_bug = self.find_nearest_bug(env);
+            let proximity_to_bug = nearest_bug.as_ref().map(|x| self.dst_to_bug(&x));
+            let direction_to_nearest_bug = nearest_bug.as_ref().map(|x| self.direction_to_bug(&x));
+            let color_of_nearest_bug = nearest_bug.as_ref().map(|x| x.color.clone());
 
-        let VerboseOutput {
-            output: brain_output,
-            activations,
-        } = self.brain.proceed_verbosely(brain_input.clone());
+            let brain_input = brain::Input {
+                energy_level: self.energy_level,
+                energy_capacity: self.energy_capacity(),
+                rotation: self.rotation,
+                proximity_to_food: nearest_food.as_ref().map(|x| x.dst),
+                direction_to_nearest_food: nearest_food.as_ref().map(|x| x.direction),
+                size_of_nearest_food: nearest_food.as_ref().map(|x| x.size),
+                age,
+                proximity_to_bug,
+                direction_to_nearest_bug,
+                color_of_nearest_bug,
+                baby_charge_level: self.baby_charge_level,
+                baby_charge_capacity: self.baby_charge_capacity(),
+                vision_range: self.vision_range,
+            };
 
-        self.last_brain_log = Some(BrainLog {
-            input: brain_input.clone(),
-            output: brain_output.clone(),
-            activations,
-        });
+            let VerboseOutput {
+                output: brain_output,
+                activations,
+            } = self.brain.proceed_verbosely(brain_input.clone());
 
-        {
-            let raw_delta = (self.rotation + brain_output.relative_desired_rotation)
-                .signed_distance(self.rotation)
-                .radians();
+            self.last_brain_log = Some(BrainLog {
+                input: brain_input.clone(),
+                output: brain_output.clone(),
+                activations,
+            });
 
-            if raw_delta.abs() > 0.001 {
-                let delta_rotation = DeltaAngle::from_radians(
-                    sign(raw_delta)
-                        * raw_delta
-                            .abs()
-                            .min(brain_output.rotation_velocity.unwrap_radians())
-                        * 0.01
-                        * dt.as_secs_f64(),
-                );
+            {
+                let raw_delta = (self.rotation + brain_output.relative_desired_rotation)
+                    .signed_distance(self.rotation)
+                    .radians();
 
-                self.rotation += delta_rotation;
+                if raw_delta.abs() > 0.001 {
+                    let delta_rotation = DeltaAngle::from_radians(
+                        sign(raw_delta)
+                            * raw_delta
+                                .abs()
+                                .min(brain_output.rotation_velocity.unwrap_radians())
+                            * 0.01
+                            * dt.as_secs_f64(),
+                    );
 
-                let delta_energy =
-                    delta_rotation.radians().abs_as_noneg() * noneg_float(0.001) * self.size();
+                    self.rotation += delta_rotation;
+
+                    let delta_energy =
+                        delta_rotation.radians().abs_as_noneg() * noneg_float(0.001) * self.size();
+                    utils::drain_energy(&mut self.energy_level, delta_energy);
+                }
+            }
+
+            {
+                let delta_distance = brain_output.velocity * dt.as_secs_f64();
+                let new_pos = Complex::from_cartesian(*self.position.x(), *self.position.y())
+                    + Complex::from_polar(delta_distance, self.rotation);
+
+                self.position = (*new_pos.real(), *new_pos.imag()).into();
+
+                let delta_energy = delta_distance.abs_as_noneg() * noneg_float(0.001) * self.size();
                 utils::drain_energy(&mut self.energy_level, delta_energy);
             }
-        }
 
-        {
-            let delta_distance = brain_output.velocity * dt.as_secs_f64();
-            let new_pos = Complex::from_cartesian(*self.position.x(), *self.position.y())
-                + Complex::from_polar(delta_distance, self.rotation);
-
-            self.position = (*new_pos.real(), *new_pos.imag()).into();
-
-            let delta_energy = delta_distance.abs_as_noneg() * noneg_float(0.001) * self.size();
-            utils::drain_energy(&mut self.energy_level, delta_energy);
-        }
-
-        {
-            let delta_energy = brain_output.baby_charging_rate
-                * noneg_float(0.01)
-                * NoNeg::wrap(dt.as_secs_f64()).unwrap();
-
-            let baby_charge_capacity = self.baby_charge_capacity();
-            utils::transfer_energy(
-                &mut self.energy_level,
-                &mut self.baby_charge_level,
-                delta_energy,
-                baby_charge_capacity,
-            );
-        }
-
-        /* heat generation */
-        {
-            let heat_capacity = self.heat_capacity();
-            let delta_energy =
-                noneg_float(0.001) * self.size() * NoNeg::wrap(dt.as_secs_f64()).unwrap();
-            utils::transfer_energy(
-                &mut self.energy_level,
-                &mut self.heat_level,
-                delta_energy,
-                heat_capacity,
-            );
-        }
-
-        let mut requests: Vec<EnvironmentRequest<T>> = Default::default();
-
-        if let (Some(nearest_food), Some(proximity_to_food)) = (nearest_food, proximity_to_food) {
-            if proximity_to_food
-                < EAT_FOOD_MAX_PROXIMITY * self.size() + nearest_food.radius()
             {
-                let eat_rate = noneg_float(0.1) * self.size;
-                requests.push(EnvironmentRequest::TransferEnergyFromFoodToBug {
-                    food_id: nearest_food.id(),
-                    bug_id: self.id,
-                    delta_energy: NoNeg::wrap(dt.as_secs_f64()).unwrap() * eat_rate,
-                });
-            }
-        }
+                let delta_energy = brain_output.baby_charging_rate
+                    * noneg_float(0.01)
+                    * NoNeg::wrap(dt.as_secs_f64()).unwrap();
 
-        if self.baby_charge_level >= self.baby_charge_capacity() {
-            for baby in self.reproduce_asexually(rng, env.now().clone()) {
-                requests.push(EnvironmentRequest::GiveBirth(baby));
+                let baby_charge_capacity = self.baby_charge_capacity();
+                utils::transfer_energy(
+                    &mut self.energy_level,
+                    &mut self.baby_charge_level,
+                    delta_energy,
+                    baby_charge_capacity,
+                );
             }
-            self.baby_charge_level =
-                NoNeg::wrap(self.baby_charge_level - self.baby_charge_capacity()).unwrap();
-        }
 
-        if self.energy_level == noneg_float(0.) || age > noneg_float(1.) {
+            /* heat generation */
+            {
+                let heat_capacity = self.heat_capacity();
+                let delta_energy =
+                    noneg_float(0.001) * self.size() * NoNeg::wrap(dt.as_secs_f64()).unwrap();
+                utils::transfer_energy(
+                    &mut self.energy_level,
+                    &mut self.heat_level,
+                    delta_energy,
+                    heat_capacity,
+                );
+            }
+
+            if let Some(nearest_food) = nearest_food {
+                if nearest_food.dst
+                    < EAT_FOOD_MAX_PROXIMITY * self.size() + nearest_food.food.radius()
+                {
+                    let eat_rate = noneg_float(0.1) * self.size;
+                    requests.push(EnvironmentRequest::TransferEnergyFromFoodToBug {
+                        food_id: nearest_food.food.id(),
+                        bug_id: self.id,
+                        delta_energy: NoNeg::wrap(dt.as_secs_f64()).unwrap() * eat_rate,
+                    });
+                }
+            }
+
+            if self.baby_charge_level >= self.baby_charge_capacity() {
+                for baby in self.reproduce_asexually(rng, env.now().clone()) {
+                    requests.push(EnvironmentRequest::GiveBirth(baby));
+                }
+                self.baby_charge_level =
+                    NoNeg::wrap(self.baby_charge_level - self.baby_charge_capacity()).unwrap();
+            }
+
+            if self.energy_level == noneg_float(0.) {
+                requests.push(EnvironmentRequest::Kill { id: self.id });
+            }
+        } else {
             requests.push(EnvironmentRequest::Kill { id: self.id });
         }
-
         requests
     }
 }
