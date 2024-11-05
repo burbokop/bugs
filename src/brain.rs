@@ -22,7 +22,9 @@ fn delta_angle_to_activation(a: DeltaAngle<Float>) -> Float {
 }
 
 fn activation_to_delta_angle(a: Float) -> DeltaAngle<Float> {
-    DeltaAngle::from_radians(math::fit_into_range_inclusive(a.abs(), -1. ..=1., -PI..=PI).unwrap())
+    DeltaAngle::from_radians(
+        math::fit_into_range_inclusive(a, -1. ..=1., (-PI * 2.)..=PI * 2.).unwrap(),
+    )
 }
 
 fn activation_to_noneg_delta_angle(a: Float) -> DeltaAngle<NoNeg<Float>> {
@@ -81,7 +83,7 @@ impl From<Input> for [Float; 16] {
                 .unwrap_or(1.),
             value
                 .direction_to_nearest_food
-                .map(|d| delta_angle_to_activation(value.rotation.signed_distance(d)))
+                .map(|d| delta_angle_to_activation(d.signed_distance(value.rotation)))
                 .unwrap_or(0.),
             value
                 .size_of_nearest_food
@@ -94,7 +96,7 @@ impl From<Input> for [Float; 16] {
                 .unwrap_or(1.),
             value
                 .direction_to_nearest_bug
-                .map(|d| delta_angle_to_activation(value.rotation.signed_distance(d)))
+                .map(|d| delta_angle_to_activation(d.signed_distance(value.rotation)))
                 .unwrap_or(0.),
             value
                 .color_of_nearest_bug

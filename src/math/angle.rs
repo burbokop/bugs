@@ -1,7 +1,10 @@
-use std::ops::{Add, AddAssign, Div, Mul, Rem, Sub};
-use super::{Abs, Cos, NoNeg, Pi, RemEuclid, Sin, Two, Zero};
+use super::{Abs, Cos, DegToRad, NoNeg, Pi, RadToDeg, RemEuclid, Sin, Two, Zero};
+use std::{
+    fmt::Display,
+    ops::{Add, AddAssign, Div, Mul, Rem, Sub},
+};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Angle<T> {
     value: T,
 }
@@ -11,8 +14,13 @@ impl<T> Angle<T> {
         Self { value }
     }
 
-    pub(crate) fn from_degrees(value: T) -> Self {
-        todo!()
+    pub(crate) fn from_degrees<U>(value: U) -> Self
+    where
+        U: DegToRad<Output = T>,
+    {
+        Self {
+            value: value.deg_to_rad(),
+        }
     }
 
     /// Result in range 0..PI*2
@@ -49,7 +57,7 @@ impl<T> Angle<T> {
         self.value.sin()
     }
 
-    pub(crate) fn signed_distance(self, other: Angle<T>) -> DeltaAngle<T>
+    pub fn signed_distance(self, other: Angle<T>) -> DeltaAngle<T>
     where
         T: Clone
             + Pi
@@ -63,7 +71,7 @@ impl<T> Angle<T> {
             + PartialOrd,
     {
         let max = T::pi() * T::two();
-        let diff = self.value - other.value;
+        let diff = normalize_radians(self.value) - normalize_radians(other.value);
         DeltaAngle {
             value: if diff.clone().abs() > T::pi() {
                 if diff >= T::zero() {
@@ -78,7 +86,7 @@ impl<T> Angle<T> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DeltaAngle<T> {
     value: T,
 }
@@ -88,8 +96,13 @@ impl<T> DeltaAngle<T> {
         Self { value }
     }
 
-    pub(crate) fn from_degrees(value: T) -> Self {
-        todo!()
+    pub(crate) fn from_degrees<U>(value: U) -> Self
+    where
+        U: DegToRad<Output = T>,
+    {
+        Self {
+            value: value.deg_to_rad(),
+        }
     }
 
     /// Result in range -PI*2..PI*2
@@ -100,11 +113,23 @@ impl<T> DeltaAngle<T> {
         normalize_delta_radians(self.value)
     }
 
-    pub(crate) fn degrees(self) -> T
+    pub fn degrees(self) -> T
     where
         T: Pi + Two + Mul<Output = T> + Mul<f64, Output = T> + Div<Output = T> + Rem<Output = T>,
     {
         normalize_delta_radians(self.value) / T::pi() * 180.
+    }
+}
+
+impl<U: Display, T: RadToDeg<Output = U> + Clone> Display for DeltaAngle<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{} Δ°", self.value.clone().rad_to_deg()))
+    }
+}
+
+impl<U: Display, T: RadToDeg<Output = U> + Clone> Display for Angle<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}°", self.value.clone().rad_to_deg()))
     }
 }
 
@@ -162,7 +187,33 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::{Angle, DeltaAngle};
+    use approx::{abs_diff_eq, assert_abs_diff_eq, AbsDiffEq};
     use std::f64::consts::PI;
+
+    impl<T: AbsDiffEq<Epsilon = T>> AbsDiffEq for DeltaAngle<T> {
+        type Epsilon = DeltaAngle<T>;
+
+        fn default_epsilon() -> Self::Epsilon {
+            DeltaAngle::from_radians(T::default_epsilon())
+        }
+
+        fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
+            self.value.abs_diff_eq(&other.value, epsilon.value)
+        }
+    }
+
+    impl<T: AbsDiffEq<Epsilon = T>> AbsDiffEq for Angle<T> {
+        type Epsilon = DeltaAngle<T>;
+
+        fn default_epsilon() -> Self::Epsilon {
+            DeltaAngle::from_radians(T::default_epsilon())
+        }
+
+        fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
+            self.value.abs_diff_eq(&other.value, epsilon.value)
+        }
+    }
 
     #[test]
     fn normalize() {
@@ -180,5 +231,62 @@ mod tests {
         assert_eq!(super::normalize_delta_radians(-2.5 * PI), -0.5 * PI);
         assert_eq!(super::normalize_delta_radians(1.5 * PI), 1.5 * PI);
         assert_eq!(super::normalize_delta_radians(-1.5 * PI), -1.5 * PI);
+    }
+
+    #[test]
+    fn signed_distance() {
+        assert_abs_diff_eq!(
+            Angle::from_degrees(37.8476276094871)
+                .signed_distance(Angle::from_degrees(345.1476306413394)),
+            DeltaAngle::from_degrees(52.6999969681),
+            epsilon = DeltaAngle::from_degrees(1.)
+        );
+        assert_abs_diff_eq!(
+            Angle::from_degrees(169.17968075472993)
+                .signed_distance(Angle::from_degrees(138.21107193537364)),
+            DeltaAngle::from_degrees(30.96860881935628),
+            epsilon = DeltaAngle::from_degrees(1.)
+        );
+
+        assert_abs_diff_eq!(
+            Angle {
+                value: 0.66056571585
+            }
+            .signed_distance(Angle {
+                value: 6.02396256015
+            }),
+            DeltaAngle {
+                value: 0.91978846288
+            },
+            epsilon = DeltaAngle::from_degrees(1.)
+        );
+        assert_abs_diff_eq!(
+            Angle {
+                value: 2.95274245664
+            }
+            .signed_distance(Angle {
+                value: 2.41223826798
+            }),
+            DeltaAngle {
+                value: 0.54050418866
+            },
+            epsilon = DeltaAngle::from_degrees(1.)
+        );
+
+        // -172.7996970736128° - 491.62570194155563°
+        // assert_abs_diff_eq!(Angle { value: 3.2672616468 } .signed_distance( Angle { value: 2.29730187913 }), DeltaAngle { value: -5.31322553951 }, epsilon = DeltaAngle::from_degrees(1.));
+
+        assert_abs_diff_eq!(
+            Angle {
+                value: -3.01592366038
+            }
+            .signed_distance(Angle {
+                value: 8.58048718631
+            }),
+            DeltaAngle {
+                value: 0.9699597676700003
+            },
+            epsilon = DeltaAngle::from_degrees(1.)
+        );
     }
 }
