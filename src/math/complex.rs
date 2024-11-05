@@ -1,5 +1,5 @@
-use std::ops::{Add, Mul};
 use super::{Angle, Cos, Sin};
+use std::ops::{Add, Mul};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Complex<T> {

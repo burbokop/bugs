@@ -263,3 +263,45 @@ impl IsNeg for f64 {
         *self < 0.
     }
 }
+
+pub(crate) trait RadToDeg {
+    type Output;
+    fn rad_to_deg(self) -> Self::Output;
+}
+
+impl RadToDeg for f32 {
+    type Output = f32;
+
+    fn rad_to_deg(self) -> Self::Output {
+        self / std::f32::consts::PI * 180.
+    }
+}
+
+impl RadToDeg for f64 {
+    type Output = f64;
+
+    fn rad_to_deg(self) -> Self::Output {
+        self / std::f64::consts::PI * 180.
+    }
+}
+
+pub(crate) trait DegToRad {
+    type Output;
+    fn deg_to_rad(self) -> Self::Output;
+}
+
+impl DegToRad for f32 {
+    type Output = f32;
+
+    fn deg_to_rad(self) -> Self::Output {
+        self / 180. * std::f32::consts::PI
+    }
+}
+
+impl DegToRad for f64 {
+    type Output = f64;
+
+    fn deg_to_rad(self) -> Self::Output {
+        self / 180. * std::f64::consts::PI
+    }
+}

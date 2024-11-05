@@ -133,6 +133,10 @@ impl<T> Bug<T> {
         &self.chromosome
     }
 
+    pub(crate) fn chromosome_mut(&mut self) -> &mut Chromosome<Float> {
+        &mut self.chromosome
+    }
+
     pub fn brain(&self) -> &Brain {
         &self.brain
     }
@@ -331,12 +335,12 @@ impl<T> Bug<T> {
 
     /// return in redians
     fn direction_to_bug(&self, other: &Self) -> Angle<Float> {
-        (self.position - other.position()).angle()
+        (other.position() - self.position).angle()
     }
 
     /// return in redians
     fn direction_to_food(&self, other: &Food) -> Angle<Float> {
-        (self.position - other.position()).angle()
+        (other.position() - self.position).angle()
     }
 
     pub fn find_nearest_bug<'a>(&self, env: &'a Environment<T>) -> Option<Ref<'a, Self>> {
@@ -465,7 +469,7 @@ impl<T> Bug<T> {
                             * raw_delta
                                 .abs()
                                 .min(brain_output.rotation_velocity.unwrap_radians())
-                            * 0.01
+                            * 0.1
                             * dt.as_secs_f64(),
                     );
 
