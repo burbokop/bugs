@@ -1,6 +1,6 @@
 use app_utils::color_to_slint_rgba_color;
 use bugs::environment::{Environment, FoodSourceCreateInfo};
-use bugs::math::{noneg_float, Angle, Point};
+use bugs::math::{noneg_float, Angle, NoNeg, Point};
 use bugs::time_point::{StaticTimePoint, TimePoint as _};
 use bugs::utils::{pretty_duration, Color, Float};
 use render::{BrainRenderModel, Camera, EnvironmentRenderModel};
@@ -13,8 +13,40 @@ mod app_utils;
 mod render;
 
 slint::slint! {
-    export { MainWindow, BugInfo, EnvInfo } from "src/main.slint";
+    export { MainWindow, BugInfo, EnvInfo, DisplayTool } from "src/main.slint";
 }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Tool {
+    Nuke,
+    Food,
+    SpawnBug,
+    None,
+}
+
+impl From<Tool> for DisplayTool {
+    fn from(value: Tool) -> Self {
+        match value {
+            Tool::Nuke => Self::Nuke,
+            Tool::Food => Self::Food,
+            Tool::SpawnBug => Self::SpawnBug,
+            Tool::None => Self::None,
+        }
+    }
+}
+
+impl From<DisplayTool> for Tool {
+    fn from(value: DisplayTool) -> Self {
+        match value {
+            DisplayTool::Nuke => Self::Nuke,
+            DisplayTool::Food => Self::Food,
+            DisplayTool::SpawnBug => Self::SpawnBug,
+            DisplayTool::None => Self::None,
+        }
+    }
+}
+
+pub const NUKE_RADIUS: NoNeg<Float> = noneg_float(200.);
 
 struct State {
     environment: Environment<StaticTimePoint>,
@@ -26,6 +58,9 @@ struct State {
     pause: bool,
     selected_node: Option<(usize, usize)>,
     tps: Float,
+    active_tool: Tool,
+    tool_action_point: Option<Point<Float>>,
+    tool_action_active: bool,
 }
 
 pub fn main() -> Result<(), PlatformError> {
@@ -97,6 +132,9 @@ pub fn main() -> Result<(), PlatformError> {
         pause: true,
         selected_node: None,
         tps: 0.,
+        active_tool: Tool::None,
+        tool_action_point: None,
+        tool_action_active: false,
     }));
 
     let timer = Timer::default();
@@ -114,6 +152,25 @@ pub fn main() -> Result<(), PlatformError> {
                 let state = weak_state.upgrade().unwrap();
                 let mut state = state.borrow_mut();
                 if !state.pause {
+                    if state.tool_action_active {
+                        if let Some(tool_action_point) = state.tool_action_point {
+                            match state.active_tool {
+                                Tool::Nuke => state.environment.irradiate_area(
+                                    tool_action_point,
+                                    NUKE_RADIUS,
+                                    &mut rng,
+                                ),
+                                Tool::Food => {
+                                    state.environment.add_food(tool_action_point, &mut rng)
+                                }
+                                Tool::SpawnBug => {
+                                    state.environment.add_bug(tool_action_point, &mut rng)
+                                }
+                                Tool::None => {}
+                            }
+                        }
+                    }
+
                     let time_speed = state.time_speed;
                     state.environment.proceed(dt.mul_f64(time_speed), &mut rng);
                     state.tps = 1. / dt.as_secs_f64();
@@ -128,34 +185,57 @@ pub fn main() -> Result<(), PlatformError> {
 
     {
         let weak_state = Rc::downgrade(&state);
-        main_window.on_pointer_event(move |k, x: f32, y: f32| {
+        main_window.on_tool_clicked(move |tool: DisplayTool| {
+            let state = weak_state.upgrade().unwrap();
+            let mut state = state.try_borrow_mut().unwrap();
+            state.active_tool = tool.into();
+        })
+    }
+
+    {
+        let weak_state = Rc::downgrade(&state);
+        main_window.on_pointer_event(move |event_type, button, x: f32, y: f32| {
             let state = weak_state.upgrade().unwrap();
             let mut state = state.try_borrow_mut().unwrap();
 
             let point: Point<_> = &(!&state.camera.transformation()).unwrap()
                 * &Point::from((x as Float, y as Float));
 
-            if k == 0 {
-                let nearest_bug = state
-                    .environment
-                    .bugs()
-                    .min_by(|a, b| {
-                        (point - a.position())
-                            .len()
-                            .partial_cmp(&(point - b.position()).len())
-                            .unwrap()
-                    })
-                    .map(|bug| (bug.id(), bug.position(), bug.size()));
+            if event_type == 0 {
+                if button == 0 {
+                    let nearest_bug = state
+                        .environment
+                        .bugs()
+                        .min_by(|a, b| {
+                            (point - a.position())
+                                .len()
+                                .partial_cmp(&(point - b.position()).len())
+                                .unwrap()
+                        })
+                        .map(|bug| (bug.id(), bug.position(), bug.size()));
 
-                if let Some(nearest_bug) = nearest_bug {
-                    state.selected_bug_id = if (point - nearest_bug.1).len()
-                        < (bugs::bug::EAT_FOOD_MAX_PROXIMITY * nearest_bug.2).unwrap()
-                    {
-                        Some(nearest_bug.0)
-                    } else {
-                        None
-                    };
+                    if let Some(nearest_bug) = nearest_bug {
+                        state.selected_bug_id = if (point - nearest_bug.1).len()
+                            < (bugs::bug::EAT_FOOD_MAX_PROXIMITY * nearest_bug.2).unwrap()
+                        {
+                            Some(nearest_bug.0)
+                        } else {
+                            None
+                        };
+                    }
+                    state.tool_action_active = false
+                } else {
+                    state.active_tool = Tool::None;
                 }
+            } else if event_type == 1 {
+                if button == 0 {
+                    state.tool_action_active = true
+                }
+            } else if event_type == 2 {
+                state.tool_action_point = Some(point)
+            } else if event_type == 3 {
+                state.tool_action_point = None;
+                state.tool_action_active = false
             }
         });
     }
@@ -281,6 +361,9 @@ pub fn main() -> Result<(), PlatformError> {
                     &state.environment,
                     &state.camera,
                     &state.selected_bug_id,
+                    state.active_tool,
+                    state.tool_action_point,
+                    state.tool_action_active,
                     window.get_requested_env_canvas_width() as u32,
                     window.get_requested_env_canvas_height() as u32,
                 );
@@ -300,6 +383,8 @@ pub fn main() -> Result<(), PlatformError> {
                 });
                 window.set_fps(1. / dt.as_secs_f32());
                 window.set_tps(state.tps as f32);
+
+                window.set_active_tool(state.active_tool.into());
 
                 if let Some(bug) = state
                     .selected_bug_id
@@ -417,6 +502,15 @@ pub fn main() -> Result<(), PlatformError> {
                 CloseRequestResponse::HideWindow
             });
     }
+
+    main_window.on_inv_color(|color| {
+        slint::Color::from_argb_u8(
+            color.alpha(),
+            255 - color.red(),
+            255 - color.green(),
+            255 - color.blue(),
+        )
+    });
 
     main_window.run()
 }

@@ -1,4 +1,4 @@
-import { Slider, GroupBox, HorizontalBox, VerticalBox, GridBox } from "std-widgets.slint";
+import { Slider, GroupBox, HorizontalBox, VerticalBox, GridBox, Button } from "std-widgets.slint";
 
 export struct BugBrainInput {
     rotation: angle,
@@ -55,6 +55,13 @@ global Utils {
     }
 }
 
+export enum DisplayTool {
+    Nuke,
+    Food,
+    SpawnBug,
+    None
+}
+
 export component MainWindow inherits Window {
     in property <image> env-canvas <=> env-canvas.source;
     in property <image> brain-canvas <=> brain-canvas.source;
@@ -64,6 +71,7 @@ export component MainWindow inherits Window {
     in property <EnvInfo> env-info;
     in property <BugInfo> selected-bug-info;
     in property <BugBrainLog> selected-bug-last-brain-log;
+    in property <DisplayTool> active-tool;
 
     out property <int> requested-env-canvas-width: env-canvas.width / 1phx;
     out property <int> requested-env-canvas-height: env-canvas.height / 1phx;
@@ -71,10 +79,14 @@ export component MainWindow inherits Window {
     out property <int> requested-brain-canvas-width: brain-canvas.width / 1phx;
     out property <int> requested-brain-canvas-height: brain-canvas.height / 1phx;
 
-    pure callback pointer-event(int, length, length);
+    pure callback pointer-event(int, int, length, length);
     pure callback scroll-event(length, length, length, length, bool, bool) -> bool;
     pure callback key-press-event(string) -> bool;
     pure callback key-release-event(string) -> bool;
+
+    pure callback tool-clicked(DisplayTool);
+
+    pure callback inv-color(color) -> color;
 
     public function init_focus() {
         focus-scope.focus()
@@ -86,6 +98,7 @@ export component MainWindow inherits Window {
 
     HorizontalBox {
         padding: 0;
+        spacing: 0px;
 
         VerticalLayout {
             width: 500px;
@@ -253,22 +266,20 @@ export component MainWindow inherits Window {
                     Text {
                         font-size: 10px;
                         text: (gene * 10).round() / 10;
+                        color: root.inv-color (parent.background);
                     }
 
-                    background: index < 208
-                        ? #d81159          // brain
-                        : index < 209
-                        ? #8f2d56          // max age
-                        : index < 210
-                        ? #8ffd56          // max size
-                        : index < 211
-                        ? #13b5dd          // baby charge capacity per size
-                        : index < 212
-                        ? #ffb703          // vision range
-                        : index < 215
-                        ? #f354be          // color
-
-                        : #c7c7c7;         // not used
+                    background
+                        : index < 128 ? ((index / 16).floor().mod(2) == 0) ? #9b2226 : #e9d8a6   // brain (first layer connections)
+                        : index < 192 ? ((index / 16).round().mod(2) == 0) ? #bb3e03 : #94d2bd   // brain (second layer connections)
+                        : index < 200 ? #ee9b00 // brain (first layer biases)
+                        : index < 208 ? #ae2012 // brain (second layer biases)
+                        : index < 209 ? #ca6702   // max age
+                        : index < 210 ? #0a9396   // max size
+                        : index < 211 ? #005f73   // baby charge capacity per size
+                        : index < 212 ? #ffb703   // vision range
+                        : index < 215 ? #da1540   // color
+                        : #001219;                // not used
 
                     /**
                         0..208   - brain
@@ -280,17 +291,90 @@ export component MainWindow inherits Window {
             }
         }
 
+        Rectangle {
+            width: 100px;
+            background: #eeeeee;
+
+            VerticalBox {
+
+                Rectangle {
+                    background: root.active-tool == DisplayTool.Nuke ? #ff8800 : #00ff88;
+                    Image {
+                        width: 100px;
+                        height: 100px;
+                        image-fit: ImageFit.preserve;
+                        source: @image-url("../assets/nuke.png");
+                    }
+                    TouchArea {
+                        pointer-event(event) => {
+                            if(event.kind == PointerEventKind.up) {
+                                root.tool-clicked(DisplayTool.Nuke)
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    background: root.active-tool == DisplayTool.Food ? #ff8800 : #00ff88;
+                    Image {
+                        width: 100px;
+                        height: 100px;
+                        image-fit: ImageFit.preserve;
+                        source: @image-url("../assets/food.png");
+                    }
+                    TouchArea {
+                        pointer-event(event) => {
+                            if(event.kind == PointerEventKind.up) {
+                                root.tool-clicked(DisplayTool.Food)
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    background: root.active-tool == DisplayTool.SpawnBug ? #ff8800 : #00ff88;
+                    Image {
+                        width: 100px;
+                        height: 100px;
+                        image-fit: ImageFit.preserve;
+                        source: @image-url("../assets/bug.png");
+                    }
+                    TouchArea {
+                        pointer-event(event) => {
+                            if(event.kind == PointerEventKind.up) {
+                                root.tool-clicked(DisplayTool.SpawnBug)
+                            }
+                        }
+                    }
+                }
+
+                Empty {}
+            }
+        }
+
         env-canvas := Image {
+            colorize: touch.has-hover-changed(touch.has-hover) ? #00000000 : #00000000;
+
             touch := TouchArea {
+                pure callback has-hover-changed(bool) -> bool;
+                // property <bool> had-hover: ;
+
+                has-hover-changed(x) => {
+                    if(!x) {
+                        root.pointer-event(3, 0, self.mouse-x, self.mouse-y);
+                    }
+                    x;
+                }
+
                 pointer-event(event) => {
                     if(event.kind == PointerEventKind.up) {
-                        root.pointer-event(0, self.mouse-x, self.mouse-y);
+                        root.pointer-event(0, event.button == PointerEventButton.right ? 1 : 0, self.mouse-x, self.mouse-y);
                     } else if(event.kind == PointerEventKind.down) {
-                        root.pointer-event(1, self.mouse-x, self.mouse-y);
+                        root.pointer-event(1, event.button == PointerEventButton.right ? 1 : 0, self.mouse-x, self.mouse-y);
                     } else if(event.kind == PointerEventKind.move) {
-                        root.pointer-event(2, self.mouse-x, self.mouse-y);
+                        root.pointer-event(2, event.button == PointerEventButton.right ? 1 : 0, self.mouse-x, self.mouse-y);
                     } else if(event.kind == PointerEventKind.cancel) {
-                        root.pointer-event(3, self.mouse-x, self.mouse-y);
+                        root.pointer-event(3, event.button == PointerEventButton.right ? 1 : 0, self.mouse-x, self.mouse-y);
                     }
                 }
 
@@ -304,7 +388,9 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                mouse-cursor: self.pressed ? MouseCursor.grabbing : MouseCursor.grab;
+                mouse-cursor: root.active-tool == DisplayTool.Food || root.active-tool == DisplayTool.SpawnBug
+                    ? MouseCursor.none
+                    : self.pressed ? MouseCursor.grabbing : MouseCursor.grab;
             }
 
             VerticalBox {

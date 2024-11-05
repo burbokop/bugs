@@ -1,16 +1,13 @@
-use std::f64::consts::PI;
-
-use crate::app_utils::color_to_sdl2_rgba_color;
-
 use super::Camera;
+use crate::{app_utils::color_to_sdl2_rgba_color, Tool, NUKE_RADIUS};
 use bugs::{
     environment::Environment,
-    math::{Complex, DeltaAngle, Rect, Size},
+    math::{Complex, DeltaAngle, Point, Rect, Size},
     utils::Float,
 };
-
-use sdl2::{gfx::primitives::DrawRenderer as _, pixels::Color, surface::Surface};
+use sdl2::{gfx::primitives::DrawRenderer, pixels::Color, surface::Surface};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
+use std::f64::consts::PI;
 
 pub struct EnvironmentRenderModel {
     buffer: SharedPixelBuffer<Rgba8Pixel>,
@@ -30,6 +27,9 @@ impl EnvironmentRenderModel {
         environment: &Environment<T>,
         camera: &Camera,
         selected_bug_id: &Option<usize>,
+        active_tool: Tool,
+        tool_action_point: Option<Point<Float>>,
+        tool_action_active: bool,
         requested_canvas_width: u32,
         requested_canvas_height: u32,
     ) -> Image {
@@ -102,6 +102,7 @@ impl EnvironmentRenderModel {
                         .unwrap();
                 }
             }
+            let scale = Float::max(*transformation.scale_x(), *transformation.scale_y());
 
             canvas.set_draw_color(Color::RGB(255, 183, 195));
             for bug in environment.bugs() {
@@ -116,7 +117,6 @@ impl EnvironmentRenderModel {
                     *position.y(),
                 );
 
-                let scale = Float::max(*transformation.scale_x(), *transformation.scale_y());
                 let radius =
                     bugs::bug::EAT_FOOD_MAX_PROXIMITY.unwrap() * scale * bug.size().unwrap();
 
@@ -168,25 +168,58 @@ impl EnvironmentRenderModel {
 
                     if &Some(bug.id()) == selected_bug_id {
                         if let Some(log) = bug.last_brain_log() {
-                            let rl = Complex::from_polar(
-                                radius,
-                                bug.rotation()
-                                    + log.output.relative_desired_rotation
-                                    + DeltaAngle::from_radians(if log.output.velocity > 0. {
-                                        0.
-                                    } else {
-                                        PI
-                                    }),
-                            );
-                            canvas
-                                .line(
-                                    *position.x() as i16,
-                                    *position.y() as i16,
-                                    *position.x() as i16 + *rl.real() as i16,
-                                    *position.y() as i16 + *rl.imag() as i16,
-                                    Color::RGB(255, 183, 195),
-                                )
-                                .unwrap();
+                            {
+                                let rl = Complex::from_polar(radius, bug.rotation());
+                                canvas
+                                    .line(
+                                        *position.x() as i16,
+                                        *position.y() as i16,
+                                        *position.x() as i16 + *rl.real() as i16,
+                                        *position.y() as i16 + *rl.imag() as i16,
+                                        Color::RGB(255, 0, 0),
+                                    )
+                                    .unwrap();
+                            }
+
+                            if let Some(direction_to_nearest_food) =
+                                log.input.direction_to_nearest_food
+                            {
+                                let rl = Complex::from_polar(radius, direction_to_nearest_food);
+                                canvas
+                                    .line(
+                                        *position.x() as i16,
+                                        *position.y() as i16,
+                                        *position.x() as i16 + *rl.real() as i16,
+                                        *position.y() as i16 + *rl.imag() as i16,
+                                        Color::RGB(0, 255, 0),
+                                    )
+                                    .unwrap();
+
+                                // println!("aaa: {} - {} = {}", direction_to_nearest_food, bug.rotation(), direction_to_nearest_food.signed_distance(bug.rotation()));
+                                // println!("bbb: {} - {} = {}", direction_to_nearest_food.degrees(), bug.rotation().degrees(), direction_to_nearest_food.signed_distance(bug.rotation()).degrees());
+                                // println!("ccc: {} + {} = {}", bug.rotation(), log.output.relative_desired_rotation, bug.rotation() + log.output.relative_desired_rotation);
+                            }
+
+                            {
+                                let rl =
+                                    Complex::from_polar(
+                                        radius,
+                                        bug.rotation()
+                                            + log.output.relative_desired_rotation
+                                            + DeltaAngle::from_radians(
+                                                if log.output.velocity > 0. { 0. } else { PI },
+                                            ),
+                                    );
+                                canvas
+                                    .line(
+                                        *position.x() as i16,
+                                        *position.y() as i16,
+                                        *position.x() as i16 + *rl.real() as i16,
+                                        *position.y() as i16 + *rl.imag() as i16,
+                                        Color::RGB(255, 183, 195),
+                                    )
+                                    .unwrap();
+                            }
                         }
 
                         canvas
@@ -207,6 +240,44 @@ impl EnvironmentRenderModel {
                             )
                             .unwrap();
                     }
+                }
+            }
+
+            if let Some(tool_action_point) = tool_action_point {
+                let tool_action_point = &transformation * &tool_action_point;
+                if active_tool == Tool::Nuke {
+                    if tool_action_active {
+                        canvas
+                            .filled_circle(
+                                *tool_action_point.x() as i16,
+                                *tool_action_point.y() as i16,
+                                (NUKE_RADIUS.unwrap() * scale) as i16,
+                                Color::RGBA(255, 183, 3, 64),
+                            )
+                            .unwrap()
+                    } else {
+                        canvas
+                            .circle(
+                                *tool_action_point.x() as i16,
+                                *tool_action_point.y() as i16,
+                                (NUKE_RADIUS.unwrap() * scale) as i16,
+                                Color::RGB(255, 183, 3),
+                            )
+                            .unwrap()
+                    }
+                } else if active_tool == Tool::Food || active_tool == Tool::SpawnBug {
+                    canvas
+                        .filled_circle(
+                            *tool_action_point.x() as i16,
+                            *tool_action_point.y() as i16,
+                            (10. * scale) as i16,
+                            if active_tool == Tool::Food {
+                                Color::RGB(183, 255, 3)
+                            } else {
+                                Color::RGB(183, 3, 255)
+                            },
+                        )
+                        .unwrap()
                 }
             }
 

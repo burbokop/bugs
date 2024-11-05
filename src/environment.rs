@@ -6,6 +6,7 @@ use std::{
 
 use crate::{
     bug::Bug,
+    chromo_utils::ExtendedChromosome,
     math::{noneg_float, Angle, NoNeg, Point, Rect, Size},
     range::Range,
     time_point::TimePoint,
@@ -420,5 +421,69 @@ impl<T> Environment<T> {
 
     pub fn bugs<'a>(&'a self) -> impl Iterator<Item = Ref<'a, Bug<T>>> {
         self.bugs.iter().filter_map(|x| x.try_borrow().ok())
+    }
+
+    pub fn irradiate_area<R: RngCore>(
+        &mut self,
+        center: Point<Float>,
+        radius: NoNeg<Float>,
+        rng: &mut R,
+    ) {
+        self.bugs
+            .iter_mut()
+            .filter_map(|x| x.try_borrow_mut().ok())
+            .filter(|bug| (center - bug.position()).len() < radius.unwrap())
+            .for_each(|mut bug| {
+                bug.chromosome_mut().mutate(|_| 0.001..1., 1., rng);
+            });
+    }
+
+    pub fn add_food<R: RngCore>(&mut self, center: Point<Float>, rng: &mut R) {
+        self.food.push(Food::new(
+            &mut self.next_bug_id,
+            center,
+            NoNeg::wrap(rng.gen_range((0.)..8.)).unwrap(),
+        ));
+    }
+
+    pub fn add_bug<R: RngCore>(&mut self, center: Point<Float>, rng: &mut R)
+    where
+        T: Clone,
+    {
+        self.bugs.push(RefCell::new(Bug::give_birth_with_max_energy(
+            &mut self.next_bug_id,
+            Chromosome {
+                genes: (0..256)
+                    .map(|i| {
+                        if i == 0 {
+                            2.
+                        } else if i == 128 {
+                            0.
+                        } else if i == 18 {
+                            2.
+                        } else if i == 137 {
+                            2.
+                        } else if i == 33 {
+                            2.
+                        } else if i == 146 {
+                            -2.
+                        } else if i == 202 {
+                            1.
+                        } else if i == 130 {
+                            2.
+                        } else if i == 128 + 8 + 8 + 8 {
+                            2. // baby charge
+                        } else if (0..208).contains(&i) {
+                            0.
+                        } else {
+                            1.
+                        }
+                    })
+                    .collect(),
+            },
+            center,
+            Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
+            self.now.clone(),
+        )));
     }
 }
