@@ -1,8 +1,4 @@
-use std::{
-    ops::{Add, Mul},
-    process::Output,
-};
-
+use std::ops::{Add, Mul};
 use super::{Angle, Cos, Sin};
 
 #[derive(Debug, Clone, Copy)]

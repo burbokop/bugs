@@ -1,12 +1,9 @@
-#![feature(new_range_api)]
-#![feature(extract_if)]
-
 use app_utils::color_to_slint_rgba_color;
 use bugs::environment::{Environment, FoodSourceCreateInfo};
 use bugs::math::{noneg_float, Angle, Point};
 use bugs::utils::{pretty_duration, Color, Float};
 use render::{BrainRenderModel, Camera, EnvironmentRenderModel};
-use slint::{ComponentHandle, PlatformError, SharedString, Timer, TimerMode};
+use slint::{ComponentHandle, PlatformError, Timer, TimerMode};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};

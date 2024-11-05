@@ -1,9 +1,10 @@
-use core::range::{Range, RangeInclusive};
 use std::{
     error::Error,
     fmt::{Debug, Display},
-    ops::{Add, Div, Mul, RangeBounds, Sub},
+    ops::{Add, Div, Mul, Sub},
 };
+
+use crate::range::{Range, RangeInclusive};
 
 use super::{MinusOne, One, Zero};
 

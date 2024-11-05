@@ -1,4 +1,4 @@
-use std::ops::{Add, Mul};
+use std::ops::Add;
 
 use super::{Abs, Angle, Atan2, Sqr, Sqrt};
 

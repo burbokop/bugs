@@ -1,15 +1,13 @@
-use core::range::Range;
 use std::{
     error::Error,
     fmt::{Debug, Display},
     ops::RangeBounds,
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 
 use rand::distributions::uniform::{SampleRange, SampleUniform};
-use serde::de::value;
 
-use crate::math::NoNeg;
+use crate::{math::NoNeg, range::Range};
 
 pub type Float = f64;
 
@@ -75,12 +73,12 @@ pub(crate) fn sample_range_from_range<T: SampleUniform + PartialOrd>(
 }
 
 pub fn pretty_duration(duration: Duration) -> String {
-    if duration > Duration::from_hours(1) {
+    if duration > Duration::from_secs(60 * 60) {
         return format!("{:.2} h", duration.as_secs_f64() / 60. / 60.);
-    } else if duration > Duration::from_mins(1) {
+    } else if duration > Duration::from_secs(60) {
         return format!("{:.2} m", duration.as_secs_f64() / 60.);
     } else if duration > Duration::from_secs(1) {
-        return format!("{:.2} s", duration.as_millis_f64() / 1000.);
+        return format!("{:.2} s", duration.as_millis() as f64 / 1000.);
     } else if duration > Duration::from_millis(1) {
         return format!("{:.2} ms", duration.as_micros() as f64 / 1000.);
     } else if duration > Duration::from_micros(1) {
