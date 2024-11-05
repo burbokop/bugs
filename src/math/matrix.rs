@@ -161,7 +161,7 @@ impl<T> Matrix<T> {
             .into()
     }
 
-    /**
+    /*
      * @brief apply_affine_to_point
      * @return vector (x, y) multiplied by matrix
      *               | A B C |
@@ -205,7 +205,7 @@ impl<T> Matrix<T> {
         .unwrap();
     }
 
-    /**
+    /*
      * @brief apply_affine_without_translation
      * @return vector (x, y) multiplied by matrix, treating matrix translation as zero.
      *               | A B 0 |

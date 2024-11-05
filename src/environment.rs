@@ -1,4 +1,3 @@
-use core::range::Range;
 use std::{
     cell::{Ref, RefCell},
     f64::consts::PI,
@@ -9,6 +8,7 @@ use std::{
 use crate::{
     bug::Bug,
     math::{noneg_float, Angle, NoNeg, Point, Rect, Size},
+    range::Range,
     time_point::TimePoint,
     utils::{sample_range_from_range, Float},
 };

@@ -1,9 +1,9 @@
 use crate::{
     math::{self, Angle, DeltaAngle, NoNeg},
-    utils::{self, Color, Float, RequiredToBeInRange as _},
+    range::Range,
+    utils::{Color, Float, RequiredToBeInRange as _},
 };
 use chromosome::Chromosome;
-use core::range::Range;
 use simple_neural_net::{normalizers, Arr, Layer as _, PerceptronLayer};
 use std::f64::consts::PI;
 

@@ -1,5 +1,4 @@
 use std::ops::{Add, AddAssign, Div, Mul, Rem, Sub};
-
 use super::{Abs, Cos, NoNeg, Pi, RemEuclid, Sin, Two, Zero};
 
 #[derive(Debug, Clone, Copy)]

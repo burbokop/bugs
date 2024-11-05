@@ -4,9 +4,8 @@ use crate::app_utils::color_to_sdl2_rgba_color;
 
 use super::Camera;
 use bugs::{
-    bug,
     environment::Environment,
-    math::{Angle, Complex, DeltaAngle, Rect, Size},
+    math::{Complex, DeltaAngle, Rect, Size},
     utils::Float,
 };
 

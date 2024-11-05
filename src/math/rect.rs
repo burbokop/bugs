@@ -1,8 +1,5 @@
-use core::range::Range;
-use std::{
-    ops::{Add, Div, Sub},
-    process::Output,
-};
+use crate::range::Range;
+use std::ops::{Add, Div, Sub};
 
 use super::{Point, Size, Two};
 
