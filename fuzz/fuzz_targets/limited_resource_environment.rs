@@ -3,7 +3,7 @@
 use std::{
     f64::consts::PI,
     ops::AddAssign,
-    time::{Duration, SystemTime},
+    time::{Duration, Instant, SystemTime},
 };
 
 use bugs::time_point::TimePoint;
@@ -18,6 +18,7 @@ use libfuzzer_sys::fuzz_target;
 use rand::Rng as _;
 use rand_pcg::Pcg64;
 use rand_seeder::Seeder;
+use memory_stats::memory_stats;
 
 #[derive(Clone)]
 struct FakeTime(SystemTime);
@@ -47,7 +48,7 @@ fuzz_target!(|data: &[u8]| {
 
     let mut environment = Environment::new(
         the_beginning_of_times.clone(),
-        Food::generate_vec(&mut rng, -50. ..50., -50. ..50., 0. ..1., 1024),
+        Food::generate_vec(&mut rng, -50. ..50., -50. ..50., 0. ..1., 512),
         vec![],
         vec![Bug::give_birth_with_max_energy(
             Chromosome::new_random(256, (-1.)..1., &mut rng),
@@ -63,12 +64,27 @@ fuzz_target!(|data: &[u8]| {
         environment.bugs().next().unwrap().chromosome().genes
     );
 
+    std::thread::spawn(|| {
+        loop {
+            if let Some(usage) = memory_stats() {
+                if usage.physical_mem > 1024 * 1024 * 1024 {
+                    panic!("Current memory usage exceeds limit: {:?}", usage);
+                }
+            } else {
+                panic!("Couldn't get the current memory usage");
+            }
+            std::thread::sleep(Duration::from_secs(1));
+        }
+    });
+
     let dt = Duration::from_millis(1000 / 30);
     let mut i: usize = 0;
+
+    let mut last_log_instant = Instant::now();
     while environment.bugs_count() > 0 {
         environment.proceed(dt, &mut rng);
-
-        if i % 100 == 0 {
+        let now = Instant::now();
+        if i % 100 == 0 || now - last_log_instant > Duration::from_secs(5) {
             println!(
                 "iteration {}, time: {}, population: {}, food: {}",
                 i,
@@ -76,6 +92,7 @@ fuzz_target!(|data: &[u8]| {
                 environment.bugs_count(),
                 environment.food().len()
             );
+            last_log_instant = now
         }
         i += 1;
     }
