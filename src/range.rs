@@ -1,6 +1,8 @@
 use std::ops::{Bound, RangeBounds};
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Range<Idx> {
     pub start: Idx,
     pub end: Idx,

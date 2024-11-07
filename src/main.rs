@@ -1,9 +1,10 @@
 use app_utils::color_to_slint_rgba_color;
 use bugs::environment::{Environment, FoodSourceCreateInfo};
 use bugs::math::{noneg_float, Angle, Point};
+use bugs::time_point::{StaticTimePoint, TimePoint as _};
 use bugs::utils::{pretty_duration, Color, Float};
 use render::{BrainRenderModel, Camera, EnvironmentRenderModel};
-use slint::{ComponentHandle, PlatformError, Timer, TimerMode};
+use slint::{CloseRequestResponse, ComponentHandle, PlatformError, Timer, TimerMode};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -16,7 +17,7 @@ slint::slint! {
 }
 
 struct State {
-    environment: Environment<Instant>,
+    environment: Environment<StaticTimePoint>,
     camera: Camera,
     environment_render_model: RefCell<EnvironmentRenderModel>,
     brain_render_model: RefCell<BrainRenderModel>,
@@ -28,57 +29,66 @@ struct State {
 }
 
 pub fn main() -> Result<(), PlatformError> {
+    let exe_path = std::env::current_exe().unwrap();
+    let exe_dir = exe_path.parent().unwrap();
+    let save_path = exe_dir.join("save.json");
+    println!("save_path: {:?}", save_path);
+
     let mut rng = rand::thread_rng();
 
     let state = Rc::new(RefCell::new(State {
-        environment: Environment::generate(
-            Instant::now(),
-            &mut rng,
-            // max energy increases by 2^x, and spawn interval increases by 3^x
-            vec![
-                FoodSourceCreateInfo {
-                    position: (0., 0.).into(),
-                    size: (1000., 1000.).into(),
-                    energy_range: (0. ..1.).into(),
-                    spawn_interval: Duration::from_millis((4_u64).pow(0) * 1000),
-                },
-                FoodSourceCreateInfo {
-                    position: (0., 0.).into(),
-                    size: (2000., 2000.).into(),
-                    energy_range: (0. ..2.).into(),
-                    spawn_interval: Duration::from_millis((4_u64).pow(1) * 1000),
-                },
-                FoodSourceCreateInfo {
-                    position: (0., 0.).into(),
-                    size: (4000., 4000.).into(),
-                    energy_range: (0. ..4.).into(),
-                    spawn_interval: Duration::from_millis((4_u64).pow(2) * 1000),
-                },
-                FoodSourceCreateInfo {
-                    position: (0., 0.).into(),
-                    size: (16000., 16000.).into(),
-                    energy_range: (0. ..8.).into(),
-                    spawn_interval: Duration::from_millis((4_u64).pow(3) * 1000),
-                },
-                FoodSourceCreateInfo {
-                    position: (0., 0.).into(),
-                    size: (32000., 32000.).into(),
-                    energy_range: (0. ..16.).into(),
-                    spawn_interval: Duration::from_millis((4_u64).pow(4) * 1000),
-                },
-                FoodSourceCreateInfo {
-                    position: (0., 0.).into(),
-                    size: (64000., 64000.).into(),
-                    energy_range: (0. ..32.).into(),
-                    spawn_interval: Duration::from_millis((4_u64).pow(5) * 1000),
-                },
-            ],
-            -1000. ..1000.,
-            -1000. ..1000.,
-            0. ..1.,
-            32768,
-            (0., 0.).into(),
-        ),
+        environment: if save_path.exists() {
+            serde_json::from_str(&std::fs::read_to_string(&save_path).unwrap()).unwrap()
+        } else {
+            Environment::generate(
+                StaticTimePoint::default(),
+                &mut rng,
+                // max energy increases by 2^x, and spawn interval increases by 3^x
+                vec![
+                    FoodSourceCreateInfo {
+                        position: (0., 0.).into(),
+                        size: (1000., 1000.).into(),
+                        energy_range: (0. ..1.).into(),
+                        spawn_interval: Duration::from_millis((4_u64).pow(0) * 1000),
+                    },
+                    FoodSourceCreateInfo {
+                        position: (0., 0.).into(),
+                        size: (2000., 2000.).into(),
+                        energy_range: (0. ..2.).into(),
+                        spawn_interval: Duration::from_millis((4_u64).pow(1) * 1000),
+                    },
+                    FoodSourceCreateInfo {
+                        position: (0., 0.).into(),
+                        size: (4000., 4000.).into(),
+                        energy_range: (0. ..4.).into(),
+                        spawn_interval: Duration::from_millis((4_u64).pow(2) * 1000),
+                    },
+                    FoodSourceCreateInfo {
+                        position: (0., 0.).into(),
+                        size: (16000., 16000.).into(),
+                        energy_range: (0. ..8.).into(),
+                        spawn_interval: Duration::from_millis((4_u64).pow(3) * 1000),
+                    },
+                    FoodSourceCreateInfo {
+                        position: (0., 0.).into(),
+                        size: (32000., 32000.).into(),
+                        energy_range: (0. ..16.).into(),
+                        spawn_interval: Duration::from_millis((4_u64).pow(4) * 1000),
+                    },
+                    FoodSourceCreateInfo {
+                        position: (0., 0.).into(),
+                        size: (64000., 64000.).into(),
+                        energy_range: (0. ..32.).into(),
+                        spawn_interval: Duration::from_millis((4_u64).pow(5) * 1000),
+                    },
+                ],
+                -1000. ..1000.,
+                -1000. ..1000.,
+                0. ..1.,
+                32768,
+                (0., 0.).into(),
+            )
+        },
         selected_bug_id: None,
         camera: Default::default(),
         environment_render_model: Default::default(),
@@ -201,11 +211,19 @@ pub fn main() -> Result<(), PlatformError> {
 
     {
         let weak_state = Rc::downgrade(&state);
+        let save_path = save_path.clone();
         main_window.on_key_release_event(move |text| {
             let state = weak_state.upgrade().unwrap();
             let mut state = state.try_borrow_mut().unwrap();
             if let Ok(lvl) = text.parse::<u32>() {
                 state.time_speed = (2_u32).pow(lvl) as f64;
+                true
+            } else if text == "q" {
+                std::fs::write(
+                    &save_path,
+                    serde_json::to_string_pretty(&state.environment).unwrap(),
+                )
+                .unwrap();
                 true
             } else if text == " " {
                 state.pause = !state.pause;
@@ -272,7 +290,7 @@ pub fn main() -> Result<(), PlatformError> {
                         state
                             .environment
                             .now()
-                            .duration_since(state.environment.creation_time().clone()),
+                            .duration_since(state.environment.creation_time()),
                     )
                     .into(),
                     pause: state.pause,
@@ -382,6 +400,22 @@ pub fn main() -> Result<(), PlatformError> {
                 window.window().request_redraw();
             }
         });
+    }
+
+    {
+        let weak_state = Rc::downgrade(&state);
+        main_window
+            .window()
+            .on_close_requested(move || -> CloseRequestResponse {
+                let state = weak_state.upgrade().unwrap();
+                let state = state.borrow();
+                std::fs::write(
+                    &save_path,
+                    serde_json::to_string_pretty(&state.environment).unwrap(),
+                )
+                .unwrap();
+                CloseRequestResponse::HideWindow
+            });
     }
 
     main_window.run()

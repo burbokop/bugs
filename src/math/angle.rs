@@ -1,26 +1,24 @@
+use serde::{Deserialize, Serialize};
+
 use super::{Abs, Cos, DegToRad, NoNeg, Pi, RadToDeg, RemEuclid, Sin, Two, Zero};
 use std::{
     fmt::Display,
     ops::{Add, AddAssign, Div, Mul, Rem, Sub},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Angle<T> {
-    value: T,
-}
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Angle<T>(T);
 
 impl<T> Angle<T> {
     pub fn from_radians(value: T) -> Self {
-        Self { value }
+        Self(value)
     }
 
     pub(crate) fn from_degrees<U>(value: U) -> Self
     where
         U: DegToRad<Output = T>,
     {
-        Self {
-            value: value.deg_to_rad(),
-        }
+        Self(value.deg_to_rad())
     }
 
     /// Result in range 0..PI*2
@@ -28,7 +26,7 @@ impl<T> Angle<T> {
     where
         T: Pi + Two + Mul<Output = T> + RemEuclid<Output = T>,
     {
-        normalize_radians(self.value)
+        normalize_radians(self.0)
     }
 
     pub fn degrees(self) -> T
@@ -40,21 +38,21 @@ impl<T> Angle<T> {
             + Div<Output = T>
             + RemEuclid<Output = T>,
     {
-        normalize_radians(self.value) / T::pi() * 180.
+        normalize_radians(self.0) / T::pi() * 180.
     }
 
     pub(crate) fn cos(self) -> <T as Cos>::Output
     where
         T: Cos,
     {
-        self.value.cos()
+        self.0.cos()
     }
 
     pub(crate) fn sin(self) -> <T as Sin>::Output
     where
         T: Sin,
     {
-        self.value.sin()
+        self.0.sin()
     }
 
     pub fn signed_distance(self, other: Angle<T>) -> DeltaAngle<T>
@@ -71,7 +69,7 @@ impl<T> Angle<T> {
             + PartialOrd,
     {
         let max = T::pi() * T::two();
-        let diff = normalize_radians(self.value) - normalize_radians(other.value);
+        let diff = normalize_radians(self.0) - normalize_radians(other.0);
         DeltaAngle {
             value: if diff.clone().abs() > T::pi() {
                 if diff >= T::zero() {
@@ -129,7 +127,7 @@ impl<U: Display, T: RadToDeg<Output = U> + Clone> Display for DeltaAngle<T> {
 
 impl<U: Display, T: RadToDeg<Output = U> + Clone> Display for Angle<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}°", self.value.clone().rad_to_deg()))
+        f.write_fmt(format_args!("{}°", self.0.clone().rad_to_deg()))
     }
 }
 
@@ -154,7 +152,7 @@ where
     T: AddAssign<U>,
 {
     fn add_assign(&mut self, rhs: DeltaAngle<U>) {
-        self.value += rhs.value
+        self.0 += rhs.value
     }
 }
 
@@ -166,7 +164,7 @@ where
 
     fn add(self, rhs: DeltaAngle<U>) -> Self::Output {
         Self::Output {
-            value: self.value + rhs.value,
+            0: self.0 + rhs.value,
         }
     }
 }
@@ -211,7 +209,7 @@ mod tests {
         }
 
         fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
-            self.value.abs_diff_eq(&other.value, epsilon.value)
+            self.0.abs_diff_eq(&other.0, epsilon.value)
         }
     }
 
@@ -249,24 +247,14 @@ mod tests {
         );
 
         assert_abs_diff_eq!(
-            Angle {
-                value: 0.66056571585
-            }
-            .signed_distance(Angle {
-                value: 6.02396256015
-            }),
+            Angle(0.66056571585).signed_distance(Angle(6.02396256015)),
             DeltaAngle {
                 value: 0.91978846288
             },
             epsilon = DeltaAngle::from_degrees(1.)
         );
         assert_abs_diff_eq!(
-            Angle {
-                value: 2.95274245664
-            }
-            .signed_distance(Angle {
-                value: 2.41223826798
-            }),
+            Angle(2.95274245664).signed_distance(Angle(2.41223826798)),
             DeltaAngle {
                 value: 0.54050418866
             },
@@ -277,12 +265,7 @@ mod tests {
         // assert_abs_diff_eq!(Angle { value: 3.2672616468 } .signed_distance( Angle { value: 2.29730187913 }), DeltaAngle { value: -5.31322553951 }, epsilon = DeltaAngle::from_degrees(1.));
 
         assert_abs_diff_eq!(
-            Angle {
-                value: -3.01592366038
-            }
-            .signed_distance(Angle {
-                value: 8.58048718631
-            }),
+            Angle(-3.01592366038).signed_distance(Angle(8.58048718631)),
             DeltaAngle {
                 value: 0.9699597676700003
             },

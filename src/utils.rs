@@ -6,12 +6,13 @@ use std::{
 };
 
 use rand::distributions::uniform::{SampleRange, SampleUniform};
+use serde::{Deserialize, Serialize};
 
 use crate::{math::NoNeg, range::Range};
 
 pub type Float = f64;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Color {
     pub a: Float,
     pub r: Float,
