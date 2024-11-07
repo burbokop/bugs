@@ -1,16 +1,9 @@
-use std::{
-    cell::Ref,
-    error::Error,
-    f64::consts::PI,
-    fmt::Display,
-    ops::Deref,
-    sync::atomic::{AtomicUsize, Ordering},
-    time::Duration,
-};
+use std::{cell::Ref, error::Error, f64::consts::PI, fmt::Display, ops::Deref, time::Duration};
 
 use chromosome::Chromosome;
 use rand::Rng;
 use rand::RngCore;
+use serde::{Deserialize, Serialize};
 
 #[deprecated]
 pub const EAT_FOOD_MAX_PROXIMITY: NoNeg<Float> = noneg_float(20.);
@@ -25,8 +18,6 @@ use crate::{
 };
 
 use crate::math::Point;
-
-static NEXT_BUG_ID: AtomicUsize = AtomicUsize::new(0);
 
 mod capacity {
     use crate::{
@@ -59,29 +50,77 @@ pub struct BrainLog {
     pub activations: ([Float; 16], [Float; 8], [Float; 8]),
 }
 
+#[derive(Serialize)]
 pub struct Bug<T> {
     id: usize,
     chromosome: Chromosome<Float>,
+    #[serde(skip)]
     brain: Brain,
+    #[serde(skip)]
     last_brain_log: Option<BrainLog>,
     position: Point<Float>,
     rotation: Angle<Float>,
+    #[serde(skip)]
     size: NoNeg<Float>,
     energy_level: NoNeg<Float>,
     birth_instant: T,
+    #[serde(skip)]
     max_age: Duration,
+    #[serde(skip)]
     color: Color,
     baby_charge_level: NoNeg<Float>,
+    #[serde(skip)]
     baby_charge_capacity_per_size: NoNeg<Float>,
     heat_level: NoNeg<Float>,
+    #[serde(skip)]
     vision_range: NoNeg<Float>,
+}
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for Bug<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct TmpBug<T> {
+            id: usize,
+            chromosome: Chromosome<Float>,
+            position: Point<Float>,
+            rotation: Angle<Float>,
+            energy_level: NoNeg<Float>,
+            birth_instant: T,
+            baby_charge_level: NoNeg<Float>,
+            heat_level: NoNeg<Float>,
+        }
+
+        let val = TmpBug::deserialize(deserializer)?;
+        let features = GeneticFeatures::from_chromosome(&val.chromosome);
+
+        Ok(Self {
+            id: val.id,
+            chromosome: val.chromosome,
+            brain: features.brain,
+            last_brain_log: None,
+            position: val.position,
+            rotation: val.rotation,
+            size: features.size,
+            energy_level: val.energy_level,
+            birth_instant: val.birth_instant,
+            max_age: features.max_age,
+            color: features.color,
+            baby_charge_level: val.baby_charge_level,
+            baby_charge_capacity_per_size: features.baby_charge_capacity_per_size,
+            heat_level: val.heat_level,
+            vision_range: features.vision_range,
+        })
+    }
 }
 
 #[derive(Debug)]
 pub(crate) struct BugEnergyCapacityExceeded {}
 
 impl Display for BugEnergyCapacityExceeded {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         todo!()
     }
 }
@@ -200,7 +239,8 @@ impl<T> Bug<T> {
         self.vision_range
     }
 
-    pub fn give_birth(
+    pub(crate) fn give_birth(
+        next_id: &mut usize,
         chromosome: Chromosome<Float>,
         position: Point<Float>,
         rotation: Angle<Float>,
@@ -210,7 +250,7 @@ impl<T> Bug<T> {
         let features = GeneticFeatures::from_chromosome(&chromosome);
 
         let result = Self {
-            id: NEXT_BUG_ID.fetch_add(1, Ordering::SeqCst),
+            id: *next_id,
             chromosome,
             brain: features.brain,
             last_brain_log: None,
@@ -227,6 +267,8 @@ impl<T> Bug<T> {
             vision_range: features.vision_range,
         };
 
+        *next_id += 1;
+
         if result.energy_level() > result.energy_capacity() {
             Err(BugEnergyCapacityExceeded {})
         } else {
@@ -234,16 +276,17 @@ impl<T> Bug<T> {
         }
     }
 
-    pub fn give_birth_with_max_energy(
+    pub(crate) fn give_birth_with_max_energy(
+        next_id: &mut usize,
         chromosome: Chromosome<Float>,
         position: Point<Float>,
         rotation: Angle<Float>,
         now: T,
     ) -> Self {
         let features = GeneticFeatures::from_chromosome(&chromosome);
-
+        *next_id += 1;
         Self {
-            id: NEXT_BUG_ID.fetch_add(1, Ordering::SeqCst),
+            id: *next_id - 1,
             chromosome,
             brain: features.brain,
             last_brain_log: None,
@@ -262,7 +305,8 @@ impl<T> Bug<T> {
     }
 
     // Spend all energy to produce as much progeny as possible
-    pub fn give_birth_to_twins(
+    pub(crate) fn give_birth_to_twins(
+        next_id: &mut usize,
         chromosome: Chromosome<Float>,
         position: Point<Float>,
         rotation: Angle<Float>,
@@ -280,7 +324,7 @@ impl<T> Bug<T> {
 
         for _ in 0..n.unwrap() as usize {
             result.push(Self {
-                id: NEXT_BUG_ID.fetch_add(1, Ordering::SeqCst),
+                id: *next_id,
                 chromosome: chromosome.clone(),
                 brain: features.brain.clone(),
                 last_brain_log: None,
@@ -296,12 +340,13 @@ impl<T> Bug<T> {
                 heat_level: noneg_float(0.),
                 vision_range: features.vision_range,
             });
+            *next_id += 1;
         }
 
         let reminder = NoNeg::wrap(energy_level - energy_capacity * n).unwrap();
 
         result.push(Self {
-            id: NEXT_BUG_ID.fetch_add(1, Ordering::SeqCst),
+            id: *next_id,
             chromosome: chromosome.clone(),
             brain: features.brain.clone(),
             last_brain_log: None,
@@ -317,6 +362,7 @@ impl<T> Bug<T> {
             heat_level: noneg_float(0.),
             vision_range: features.vision_range,
         });
+        *next_id += 1;
 
         result
     }
@@ -370,17 +416,16 @@ impl<T> Bug<T> {
             .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
     }
 
-    fn reproduce_asexually<R: RngCore>(&self, rng: &mut R, now: T) -> Vec<Self>
+    fn reproduce_asexually<R: RngCore>(&self, rng: &mut R) -> EnvironmentRequest
     where
         T: Clone,
     {
-        Bug::give_birth_to_twins(
-            self.chromosome.mutated_ext(|_| 0.01..0.8, 0.01, rng),
-            self.position,
-            Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
-            self.baby_charge_capacity(),
-            now,
-        )
+        EnvironmentRequest::GiveBirth {
+            chromosome: self.chromosome.mutated_ext(|_| 0.01..0.8, 0.01, rng),
+            position: self.position,
+            rotation: Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
+            energy_level: self.baby_charge_capacity(),
+        }
     }
 
     fn reproduce_sexually(&self, partner: &Self) -> Self {
@@ -403,11 +448,11 @@ impl<T> Bug<T> {
         env: &Environment<T>,
         dt: Duration,
         rng: &mut R,
-    ) -> Vec<EnvironmentRequest<T>>
+    ) -> Vec<EnvironmentRequest>
     where
         T: TimePoint + Clone,
     {
-        let mut requests: Vec<EnvironmentRequest<T>> = Default::default();
+        let mut requests: Vec<EnvironmentRequest> = Default::default();
         let age = self.age(env.now().clone());
         if age <= noneg_float(1.) {
             struct NearestFoodInfo<'a> {
@@ -533,9 +578,7 @@ impl<T> Bug<T> {
             }
 
             if self.baby_charge_level >= self.baby_charge_capacity() {
-                for baby in self.reproduce_asexually(rng, env.now().clone()) {
-                    requests.push(EnvironmentRequest::GiveBirth(baby));
-                }
+                requests.push(self.reproduce_asexually(rng));
                 self.baby_charge_level =
                     NoNeg::wrap(self.baby_charge_level - self.baby_charge_capacity()).unwrap();
             }

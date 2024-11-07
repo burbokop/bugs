@@ -6,19 +6,22 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
-use bugs::time_point::TimePoint;
 use bugs::utils::pretty_duration;
 use bugs::{
     bug::Bug,
     environment::{Environment, Food},
     math::Angle,
 };
+use bugs::{
+    environment::{BugCreateInfo, FoodCreateInfo},
+    time_point::TimePoint,
+};
 use chromosome::Chromosome;
 use libfuzzer_sys::fuzz_target;
+use memory_stats::memory_stats;
 use rand::Rng as _;
 use rand_pcg::Pcg64;
 use rand_seeder::Seeder;
-use memory_stats::memory_stats;
 
 #[derive(Clone)]
 struct FakeTime(SystemTime);
@@ -48,14 +51,13 @@ fuzz_target!(|data: &[u8]| {
 
     let mut environment = Environment::new(
         the_beginning_of_times.clone(),
-        Food::generate_vec(&mut rng, -50. ..50., -50. ..50., 0. ..1., 512),
+        FoodCreateInfo::generate_vec(&mut rng, -50. ..50., -50. ..50., 0. ..1., 512),
         vec![],
-        vec![Bug::give_birth_with_max_energy(
-            Chromosome::new_random(256, (-1.)..1., &mut rng),
-            (0., 0.).into(),
-            Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
-            the_beginning_of_times.clone(),
-        )],
+        vec![BugCreateInfo {
+            chromosome: Chromosome::new_random(256, (-1.)..1., &mut rng),
+            position: (0., 0.).into(),
+            rotation: Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
+        }],
     );
 
     println!(
@@ -64,17 +66,15 @@ fuzz_target!(|data: &[u8]| {
         environment.bugs().next().unwrap().chromosome().genes
     );
 
-    std::thread::spawn(|| {
-        loop {
-            if let Some(usage) = memory_stats() {
-                if usage.physical_mem > 1024 * 1024 * 1024 {
-                    panic!("Current memory usage exceeds limit: {:?}", usage);
-                }
-            } else {
-                panic!("Couldn't get the current memory usage");
+    std::thread::spawn(|| loop {
+        if let Some(usage) = memory_stats() {
+            if usage.physical_mem > 1024 * 1024 * 1024 {
+                panic!("Current memory usage exceeds limit: {:?}", usage);
             }
-            std::thread::sleep(Duration::from_secs(1));
+        } else {
+            panic!("Couldn't get the current memory usage");
         }
+        std::thread::sleep(Duration::from_secs(1));
     });
 
     let dt = Duration::from_millis(1000 / 30);

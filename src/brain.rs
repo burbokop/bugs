@@ -4,6 +4,7 @@ use crate::{
     utils::{Color, Float, RequiredToBeInRange as _},
 };
 use chromosome::Chromosome;
+use serde::Serialize;
 use simple_neural_net::{normalizers, Arr, Layer as _, PerceptronLayer};
 use std::f64::consts::PI;
 

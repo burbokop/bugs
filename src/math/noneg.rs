@@ -4,6 +4,8 @@ use std::{
     ops::{Add, AddAssign, Div, Mul, Sub},
 };
 
+use serde::{Deserialize, Serialize};
+
 use crate::utils::Float;
 
 use super::{Abs, Floor, IsNeg, Pi, Sqrt};
@@ -12,6 +14,32 @@ use super::{Abs, Floor, IsNeg, Pi, Sqrt};
 #[derive(Clone, Copy, Debug)]
 pub struct NoNeg<T> {
     value: T,
+}
+
+impl<T: Serialize> Serialize for NoNeg<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.value.serialize(serializer)
+    }
+}
+
+impl<'de, T: Deserialize<'de> + IsNeg + Debug> Deserialize<'de> for NoNeg<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = T::deserialize(deserializer)?;
+        if value.is_neg() {
+            Err(serde::de::Error::custom(&format!(
+                "Can not deserialize {:?} as NoNeg because it is negative.",
+                value
+            )))
+        } else {
+            Ok(Self { value })
+        }
+    }
 }
 
 impl<T> Display for NoNeg<T> {
