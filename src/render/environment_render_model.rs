@@ -1,6 +1,6 @@
 use super::Camera;
 use crate::{app_utils::color_to_sdl2_rgba_color, Tool, NUKE_RADIUS};
-use bugs::{
+use bugs_lib::{
     environment::Environment,
     math::{Complex, DeltaAngle, Point, Rect, Size},
     utils::Float,
@@ -118,7 +118,7 @@ impl EnvironmentRenderModel {
                 );
 
                 let radius =
-                    bugs::bug::EAT_FOOD_MAX_PROXIMITY.unwrap() * scale * bug.size().unwrap();
+                    bugs_lib::bug::EAT_FOOD_MAX_PROXIMITY.unwrap() * scale * bug.size().unwrap();
 
                 let size = 5. * scale * bug.size().unwrap();
 

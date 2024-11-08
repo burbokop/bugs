@@ -1,4 +1,4 @@
-use bugs::utils::Color;
+use bugs_lib::utils::Color;
 
 pub(crate) fn color_to_slint_rgba_color(c: &Color) -> slint::RgbaColor<f32> {
     slint::RgbaColor {

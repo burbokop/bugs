@@ -186,7 +186,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::{Angle, DeltaAngle};
-    use approx::{abs_diff_eq, assert_abs_diff_eq, AbsDiffEq};
+    use approx::{assert_abs_diff_eq, AbsDiffEq};
     use std::f64::consts::PI;
 
     impl<T: AbsDiffEq<Epsilon = T>> AbsDiffEq for DeltaAngle<T> {

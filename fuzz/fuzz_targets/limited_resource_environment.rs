@@ -6,13 +6,12 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
-use bugs::utils::pretty_duration;
-use bugs::{
-    bug::Bug,
-    environment::{Environment, Food},
+use bugs_lib::utils::pretty_duration;
+use bugs_lib::{
+    environment::Environment,
     math::Angle,
 };
-use bugs::{
+use bugs_lib::{
     environment::{BugCreateInfo, FoodCreateInfo},
     time_point::TimePoint,
 };

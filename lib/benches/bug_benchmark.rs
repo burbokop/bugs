@@ -1,18 +1,16 @@
 use std::{
-    env,
     f64::consts::PI,
     ops::AddAssign,
     time::{Duration, SystemTime},
 };
 
-use bugs::{
-    bug::Bug,
-    environment::{Environment, Food},
+use bugs_lib::{
+    environment::{BugCreateInfo, Environment, FoodCreateInfo},
     math::Angle,
     time_point::TimePoint,
 };
 use chromosome::Chromosome;
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::Rng as _;
 use rand_pcg::Pcg64;
 use rand_seeder::Seeder;
@@ -44,14 +42,13 @@ fn find_nearest_food_small(c: &mut Criterion) {
 
     let environment = Environment::new(
         the_beginning_of_times.clone(),
-        Food::generate_vec(&mut rng, -50. ..50., -50. ..50., 0. ..1., 1024),
+        FoodCreateInfo::generate_vec(&mut rng, -50. ..50., -50. ..50., 0. ..1., 1024),
         vec![],
-        vec![Bug::give_birth_with_max_energy(
-            Chromosome::new_random(256, (-1.)..1., &mut rng),
-            (0., 0.).into(),
-            Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
-            the_beginning_of_times.clone(),
-        )],
+        vec![BugCreateInfo{
+            chromosome:            Chromosome::new_random(256, (-1.)..1., &mut rng),
+            position:            (0., 0.).into(),
+            rotation:            Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
+}],
     );
 
     let bug = environment.bugs().next().unwrap();
@@ -67,14 +64,13 @@ fn find_nearest_food_big(c: &mut Criterion) {
 
     let environment = Environment::new(
         the_beginning_of_times.clone(),
-        Food::generate_vec(&mut rng, -50. ..50., -50. ..50., 0. ..1., 16384),
+        FoodCreateInfo::generate_vec(&mut rng, -50. ..50., -50. ..50., 0. ..1., 16384),
         vec![],
-        vec![Bug::give_birth_with_max_energy(
-            Chromosome::new_random(256, (-1.)..1., &mut rng),
-            (0., 0.).into(),
-            Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
-            the_beginning_of_times.clone(),
-        )],
+        vec![BugCreateInfo {
+chromosome:            Chromosome::new_random(256, (-1.)..1., &mut rng),
+position:            (0., 0.).into(),
+rotation:            Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
+}],
     );
 
     let bug = environment.bugs().next().unwrap();

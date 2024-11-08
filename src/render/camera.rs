@@ -1,6 +1,6 @@
 use std::ops::{Add, Mul, Sub};
 
-use bugs::{
+use bugs_lib::{
     math::{Complex, Matrix, One, Point, Vector, Zero},
     utils::Float,
 };

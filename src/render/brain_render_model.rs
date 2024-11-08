@@ -1,4 +1,4 @@
-use bugs::{brain::Brain, bug::BrainLog, utils::Float};
+use bugs_lib::{brain::Brain, bug::BrainLog, utils::Float};
 use font_loader::system_fonts;
 use sdl2::{
     gfx::primitives::DrawRenderer as _,
