@@ -1,8 +1,8 @@
 use app_utils::color_to_slint_rgba_color;
-use bugs::environment::{Environment, FoodSourceCreateInfo};
-use bugs::math::{noneg_float, Angle, NoNeg, Point};
-use bugs::time_point::{StaticTimePoint, TimePoint as _};
-use bugs::utils::{pretty_duration, Color, Float};
+use bugs_lib::environment::{Environment, FoodSourceCreateInfo};
+use bugs_lib::math::{noneg_float, Angle, NoNeg, Point};
+use bugs_lib::time_point::{StaticTimePoint, TimePoint as _};
+use bugs_lib::utils::{pretty_duration, Color, Float};
 use render::{BrainRenderModel, Camera, EnvironmentRenderModel};
 use slint::{CloseRequestResponse, ComponentHandle, PlatformError, Timer, TimerMode};
 use std::cell::RefCell;
@@ -216,7 +216,7 @@ pub fn main() -> Result<(), PlatformError> {
 
                     if let Some(nearest_bug) = nearest_bug {
                         state.selected_bug_id = if (point - nearest_bug.1).len()
-                            < (bugs::bug::EAT_FOOD_MAX_PROXIMITY * nearest_bug.2).unwrap()
+                            < (bugs_lib::bug::EAT_FOOD_MAX_PROXIMITY * nearest_bug.2).unwrap()
                         {
                             Some(nearest_bug.0)
                         } else {
