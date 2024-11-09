@@ -389,14 +389,20 @@ impl<T> Bug<T> {
         (other.position() - self.position).angle()
     }
 
-    pub fn find_nearest_bug<'a>(&self, env: &'a Environment<T>) -> Option<Ref<'a, Self>> {
+    pub fn find_nearest_bug<'a>(
+        &self,
+        env: &'a Environment<T>,
+    ) -> Option<(Ref<'a, Self>, NoNeg<Float>)> {
         env.bugs()
-            .filter(|o| self.dst_to_bug(o) < self.vision_range)
-            .min_by(|a, b| {
-                self.dst_to_bug(a.deref())
-                    .partial_cmp(&self.dst_to_bug(b.deref()))
-                    .unwrap()
+            .filter_map(|other| {
+                let dst = self.dst_to_bug(&other);
+                if dst < self.vision_range {
+                    Some((other, dst))
+                } else {
+                    None
+                }
             })
+            .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
     }
 
     pub fn find_nearest_food<'a>(
@@ -462,6 +468,12 @@ impl<T> Bug<T> {
                 size: NoNeg<Float>,
             }
 
+            struct NearestBugInfo {
+                dst: NoNeg<Float>,
+                direction: Angle<Float>,
+                color: Color,
+            }
+
             let nearest_food = self
                 .find_nearest_food(env)
                 .map(|(food, dst)| NearestFoodInfo {
@@ -471,10 +483,11 @@ impl<T> Bug<T> {
                     size: food.energy(),
                 });
 
-            let nearest_bug = self.find_nearest_bug(env);
-            let proximity_to_bug = nearest_bug.as_ref().map(|x| self.dst_to_bug(&x));
-            let direction_to_nearest_bug = nearest_bug.as_ref().map(|x| self.direction_to_bug(&x));
-            let color_of_nearest_bug = nearest_bug.as_ref().map(|x| x.color.clone());
+            let nearest_bug = self.find_nearest_bug(env).map(|(bug, dst)| NearestBugInfo {
+                dst,
+                direction: self.direction_to_bug(&bug),
+                color: bug.color.clone(),
+            });
 
             let brain_input = brain::Input {
                 energy_level: self.energy_level,
@@ -484,9 +497,9 @@ impl<T> Bug<T> {
                 direction_to_nearest_food: nearest_food.as_ref().map(|x| x.direction),
                 size_of_nearest_food: nearest_food.as_ref().map(|x| x.size),
                 age,
-                proximity_to_bug,
-                direction_to_nearest_bug,
-                color_of_nearest_bug,
+                proximity_to_bug: nearest_bug.as_ref().map(|x| x.dst),
+                direction_to_nearest_bug: nearest_bug.as_ref().map(|x| x.direction),
+                color_of_nearest_bug: nearest_bug.as_ref().map(|x| x.color.clone()),
                 baby_charge_level: self.baby_charge_level,
                 baby_charge_capacity: self.baby_charge_capacity(),
                 vision_range: self.vision_range,

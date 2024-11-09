@@ -36,51 +36,141 @@ impl AddAssign<Duration> for FakeTime {
     }
 }
 
-fn find_nearest_food_small(c: &mut Criterion) {
+fn find_nearest_food(c: &mut Criterion) {
+    let mut rng: Pcg64 = Seeder::from(&[0xff]).make_rng();
+    let the_beginning_of_times = FakeTime::default();
+    {
+        let environment = Environment::new(
+            the_beginning_of_times.clone(),
+            FoodCreateInfo::generate_vec(&mut rng, -50. ..50., -50. ..50., 0. ..1., 1024),
+            vec![],
+            vec![BugCreateInfo {
+                chromosome: Chromosome::new_random(256, 1. ..1.01, &mut rng),
+                position: (0., 0.).into(),
+                rotation: Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
+            }],
+        );
+
+        let bug = environment.bugs().next().unwrap();
+
+        c.bench_function("find_nearest_food (small)", |b| {
+            b.iter(|| black_box(bug.find_nearest_food(&environment)))
+        });
+    }
+    {
+        let environment = Environment::new(
+            the_beginning_of_times.clone(),
+            FoodCreateInfo::generate_vec(&mut rng, -50. ..50., -50. ..50., 0. ..1., 16384),
+            vec![],
+            vec![BugCreateInfo {
+                chromosome: Chromosome::new_random(256, 1. ..1.01, &mut rng),
+                position: (0., 0.).into(),
+                rotation: Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
+            }],
+        );
+
+        let bug = environment.bugs().next().unwrap();
+
+        c.bench_function("find_nearest_food (big)", |b| {
+            b.iter(|| black_box(bug.find_nearest_food(&environment)))
+        });
+    }
+    {
+        let environment = Environment::new(
+            the_beginning_of_times.clone(),
+            FoodCreateInfo::generate_vec(
+                &mut rng,
+                -10000. ..10000.,
+                -10000. ..10000.,
+                0. ..1.,
+                16384,
+            ),
+            vec![],
+            vec![BugCreateInfo {
+                chromosome: Chromosome::new_random(256, 1. ..1.01, &mut rng),
+                position: (0., 0.).into(),
+                rotation: Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
+            }],
+        );
+
+        let bug = environment.bugs().next().unwrap();
+
+        c.bench_function("find_nearest_food (big, far)", |b| {
+            b.iter(|| black_box(bug.find_nearest_food(&environment)))
+        });
+    }
+}
+
+fn find_nearest_bug(c: &mut Criterion) {
     let mut rng: Pcg64 = Seeder::from(&[0xff]).make_rng();
     let the_beginning_of_times = FakeTime::default();
 
-    let environment = Environment::new(
-        the_beginning_of_times.clone(),
-        FoodCreateInfo::generate_vec(&mut rng, -50. ..50., -50. ..50., 0. ..1., 1024),
-        vec![],
-        vec![BugCreateInfo {
-            chromosome: Chromosome::new_random(256, (-1.)..1., &mut rng),
-            position: (0., 0.).into(),
-            rotation: Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
-        }],
-    );
+    {
+        let environment = Environment::new(
+            the_beginning_of_times.clone(),
+            vec![],
+            vec![],
+            BugCreateInfo::generate_vec(
+                &mut rng,
+                1. ..1.01,
+                -50. ..50.,
+                -50. ..50.,
+                0. ..(PI * 2.),
+                1024,
+            ),
+        );
 
-    let bug = environment.bugs().next().unwrap();
+        let bug = environment.bugs().next().unwrap();
 
-    c.bench_function("find_nearest_food (small)", |b| {
-        b.iter(|| black_box(bug.find_nearest_food(&environment)))
-    });
+        c.bench_function("find_nearest_bug (small)", |b| {
+            b.iter(|| black_box(bug.find_nearest_bug(&environment)))
+        });
+    }
+    {
+        let environment = Environment::new(
+            the_beginning_of_times.clone(),
+            vec![],
+            vec![],
+            BugCreateInfo::generate_vec(
+                &mut rng,
+                1. ..1.01,
+                -50. ..50.,
+                -50. ..50.,
+                0. ..(PI * 2.),
+                16384,
+            ),
+        );
+
+        let bug = environment.bugs().next().unwrap();
+
+        c.bench_function("find_nearest_bug (big)", |b| {
+            b.iter(|| black_box(bug.find_nearest_bug(&environment)))
+        });
+    }
+    {
+        let environment = Environment::new(
+            the_beginning_of_times.clone(),
+            vec![],
+            vec![],
+            BugCreateInfo::generate_vec(
+                &mut rng,
+                1. ..1.01,
+                -10000. ..10000.,
+                -10000. ..10000.,
+                0. ..(PI * 2.),
+                16384,
+            ),
+        );
+
+        let bug = environment.bugs().next().unwrap();
+
+        c.bench_function("find_nearest_bug (big, far)", |b| {
+            b.iter(|| black_box(bug.find_nearest_bug(&environment)))
+        });
+    }
 }
 
-fn find_nearest_food_big(c: &mut Criterion) {
-    let mut rng: Pcg64 = Seeder::from(&[0xff]).make_rng();
-    let the_beginning_of_times = FakeTime::default();
-
-    let environment = Environment::new(
-        the_beginning_of_times.clone(),
-        FoodCreateInfo::generate_vec(&mut rng, -50. ..50., -50. ..50., 0. ..1., 16384),
-        vec![],
-        vec![BugCreateInfo {
-            chromosome: Chromosome::new_random(256, (-1.)..1., &mut rng),
-            position: (0., 0.).into(),
-            rotation: Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
-        }],
-    );
-
-    let bug = environment.bugs().next().unwrap();
-
-    c.bench_function("find_nearest_food (big)", |b| {
-        b.iter(|| black_box(bug.find_nearest_food(&environment)))
-    });
-}
-
-criterion_group!(benches, find_nearest_food_small, find_nearest_food_big);
+criterion_group!(benches, find_nearest_food, find_nearest_bug,);
 criterion_main!(benches);
 
 // #1
@@ -90,3 +180,19 @@ criterion_main!(benches);
 // #2
 // find_nearest_food (small) time:   [1.6804 µs]
 // find_nearest_food (big)   time:   [24.740 µs]
+
+// #3
+// find_nearest_food (small)         [1.7837 µs]
+// find_nearest_food (big)           [28.850 µs]
+// find_nearest_food (big, far)      [26.800 µs]
+// find_nearest_bug  (small)         [4.9104 µs]
+// find_nearest_bug  (big)           [127.32 µs]
+// find_nearest_bug  (big, far)      [102.88 µs]
+
+// #4 returning dst from `find_nearest_bug`
+// find_nearest_food (small)         [1.8035 µs]
+// find_nearest_food (big)           [30.688 µs]
+// find_nearest_food (big, far)      [28.254 µs]
+// find_nearest_bug  (small)         [3.1962 µs]
+// find_nearest_bug  (big)           [112.86 µs]
+// find_nearest_bug  (big, far)      [99.102 µs]
