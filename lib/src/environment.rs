@@ -168,6 +168,43 @@ pub struct BugCreateInfo {
     pub rotation: Angle<Float>,
 }
 
+impl BugCreateInfo {
+    pub(crate) fn generate<R: RngCore, RR: SampleRange<Float> + Clone>(
+        rng: &mut R,
+        g_range: RR,
+        x_range: RR,
+        y_range: RR,
+        r_range: RR,
+    ) -> Self {
+        Self {
+            chromosome: Chromosome::new_random(256, g_range, rng),
+            position: (rng.gen_range(x_range), rng.gen_range(y_range)).into(),
+            rotation: Angle::from_radians(rng.gen_range(r_range)),
+        }
+    }
+
+    pub fn generate_vec<R: RngCore, RR: SampleRange<Float> + Clone>(
+        rng: &mut R,
+        g_range: RR,
+        x_range: RR,
+        y_range: RR,
+        r_range: RR,
+        count: usize,
+    ) -> Vec<Self> {
+        (0..count)
+            .map(|_| {
+                Self::generate(
+                    rng,
+                    g_range.clone(),
+                    x_range.clone(),
+                    y_range.clone(),
+                    r_range.clone(),
+                )
+            })
+            .collect()
+    }
+}
+
 pub(crate) enum EnvironmentRequest {
     Kill {
         id: usize,
