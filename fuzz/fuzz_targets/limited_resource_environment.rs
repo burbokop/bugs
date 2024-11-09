@@ -7,10 +7,7 @@ use std::{
 };
 
 use bugs_lib::utils::pretty_duration;
-use bugs_lib::{
-    environment::Environment,
-    math::Angle,
-};
+use bugs_lib::{environment::Environment, math::Angle};
 use bugs_lib::{
     environment::{BugCreateInfo, FoodCreateInfo},
     time_point::TimePoint,

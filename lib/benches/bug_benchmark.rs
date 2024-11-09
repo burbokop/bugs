@@ -44,11 +44,11 @@ fn find_nearest_food_small(c: &mut Criterion) {
         the_beginning_of_times.clone(),
         FoodCreateInfo::generate_vec(&mut rng, -50. ..50., -50. ..50., 0. ..1., 1024),
         vec![],
-        vec![BugCreateInfo{
-            chromosome:            Chromosome::new_random(256, (-1.)..1., &mut rng),
-            position:            (0., 0.).into(),
-            rotation:            Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
-}],
+        vec![BugCreateInfo {
+            chromosome: Chromosome::new_random(256, (-1.)..1., &mut rng),
+            position: (0., 0.).into(),
+            rotation: Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
+        }],
     );
 
     let bug = environment.bugs().next().unwrap();
@@ -67,10 +67,10 @@ fn find_nearest_food_big(c: &mut Criterion) {
         FoodCreateInfo::generate_vec(&mut rng, -50. ..50., -50. ..50., 0. ..1., 16384),
         vec![],
         vec![BugCreateInfo {
-chromosome:            Chromosome::new_random(256, (-1.)..1., &mut rng),
-position:            (0., 0.).into(),
-rotation:            Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
-}],
+            chromosome: Chromosome::new_random(256, (-1.)..1., &mut rng),
+            position: (0., 0.).into(),
+            rotation: Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
+        }],
     );
 
     let bug = environment.bugs().next().unwrap();

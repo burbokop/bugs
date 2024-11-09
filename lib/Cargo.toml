@@ -11,11 +11,11 @@ serde = { version = "1.0", features = ["derive"] }
 rand = "0.8"
 simple_neural_net = { git = "https://github.com/burbokop/simple_neural_net.git" }
 complexible = "0.2.4"
+rand_pcg = { version = "0.3.1", features = ["serde1"] }
 
 [dev-dependencies]
 criterion = "0.5.1"
 rand_seeder = "0.3.0"
-rand_pcg = "0.3.1"
 approx = "0.5.1"
 
 [[bench]]
