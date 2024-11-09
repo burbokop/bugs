@@ -1,11 +1,14 @@
 use app_utils::color_to_slint_rgba_color;
-use bugs_lib::environment::{Environment, FoodSourceCreateInfo};
+use bugs_lib::environment::{FoodSourceCreateInfo, SeededEnvironment};
 use bugs_lib::math::{noneg_float, Angle, NoNeg, Point};
 use bugs_lib::time_point::{StaticTimePoint, TimePoint as _};
 use bugs_lib::utils::{pretty_duration, Color, Float};
+use clap::Parser;
+use rand::Rng;
 use render::{BrainRenderModel, Camera, EnvironmentRenderModel};
 use slint::{CloseRequestResponse, ComponentHandle, PlatformError, Timer, TimerMode};
 use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
@@ -49,7 +52,7 @@ impl From<DisplayTool> for Tool {
 pub const NUKE_RADIUS: NoNeg<Float> = noneg_float(200.);
 
 struct State {
-    environment: Environment<StaticTimePoint>,
+    environment: SeededEnvironment<StaticTimePoint>,
     camera: Camera,
     environment_render_model: RefCell<EnvironmentRenderModel>,
     brain_render_model: RefCell<BrainRenderModel>,
@@ -63,21 +66,34 @@ struct State {
     tool_action_active: bool,
 }
 
-pub fn main() -> Result<(), PlatformError> {
-    let exe_path = std::env::current_exe().unwrap();
-    let exe_dir = exe_path.parent().unwrap();
-    let save_path = exe_dir.join("save.json");
-    println!("save_path: {:?}", save_path);
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[arg(short, long)]
+    save_file: Option<PathBuf>,
+}
 
-    let mut rng = rand::thread_rng();
+pub fn main() -> Result<(), PlatformError> {
+    let args = Args::parse();
+    let save_path = args.save_file.unwrap_or_else(|| {
+        let exe_path = std::env::current_exe().unwrap();
+        let exe_dir = exe_path.parent().unwrap();
+        exe_dir.join("save.json")
+    });
+
+    println!(
+        "save_path: {:?}, (exist: {})",
+        save_path,
+        save_path.exists()
+    );
 
     let state = Rc::new(RefCell::new(State {
         environment: if save_path.exists() {
             serde_json::from_str(&std::fs::read_to_string(&save_path).unwrap()).unwrap()
         } else {
-            Environment::generate(
+            SeededEnvironment::generate(
                 StaticTimePoint::default(),
-                &mut rng,
+                rand::thread_rng().gen(),
                 // max energy increases by 2^x, and spawn interval increases by 3^x
                 vec![
                     FoodSourceCreateInfo {
@@ -155,24 +171,18 @@ pub fn main() -> Result<(), PlatformError> {
                     if state.tool_action_active {
                         if let Some(tool_action_point) = state.tool_action_point {
                             match state.active_tool {
-                                Tool::Nuke => state.environment.irradiate_area(
-                                    tool_action_point,
-                                    NUKE_RADIUS,
-                                    &mut rng,
-                                ),
-                                Tool::Food => {
-                                    state.environment.add_food(tool_action_point, &mut rng)
-                                }
-                                Tool::SpawnBug => {
-                                    state.environment.add_bug(tool_action_point, &mut rng)
-                                }
+                                Tool::Nuke => state
+                                    .environment
+                                    .irradiate_area(tool_action_point, NUKE_RADIUS),
+                                Tool::Food => state.environment.add_food(tool_action_point),
+                                Tool::SpawnBug => state.environment.add_bug(tool_action_point),
                                 Tool::None => {}
                             }
                         }
                     }
 
                     let time_speed = state.time_speed;
-                    state.environment.proceed(dt.mul_f64(time_speed), &mut rng);
+                    state.environment.proceed(dt.mul_f64(time_speed));
                     state.tps = 1. / dt.as_secs_f64();
                 } else {
                     state.tps = 0.;

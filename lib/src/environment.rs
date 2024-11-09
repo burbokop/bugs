@@ -1,6 +1,7 @@
 use std::{
     cell::{Ref, RefCell},
     f64::consts::PI,
+    ops::Deref,
     time::Duration,
 };
 
@@ -13,11 +14,12 @@ use crate::{
     utils::{sample_range_from_range, Float},
 };
 use chromosome::Chromosome;
-use rand::Rng;
 use rand::{distributions::uniform::SampleRange, RngCore};
+use rand::{Rng, SeedableRng};
+use rand_pcg::Pcg64;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Food {
     id: usize,
     position: Point<Float>,
@@ -25,7 +27,7 @@ pub struct Food {
 }
 
 /// Generates food around itself over time
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FoodSource<T> {
     position: Point<Float>,
     size: Size<Float>,
@@ -192,6 +194,7 @@ pub struct Environment<T> {
     now: T,
     next_food_id: usize,
     next_bug_id: usize,
+    iteration: usize,
 }
 
 impl<T> Environment<T> {
@@ -238,6 +241,7 @@ impl<T> Environment<T> {
             now,
             next_food_id: 0,
             next_bug_id: 0,
+            iteration: 0,
         }
     }
 
@@ -308,6 +312,7 @@ impl<T> Environment<T> {
             now,
             next_bug_id,
             next_food_id,
+            iteration: 0,
         }
     }
 
@@ -317,6 +322,10 @@ impl<T> Environment<T> {
 
     pub fn creation_time(&self) -> &T {
         &self.creation_time
+    }
+
+    pub fn iteration(&self) -> usize {
+        self.iteration
     }
 
     pub fn proceed<R: RngCore>(&mut self, dt: Duration, rng: &mut R)
@@ -377,6 +386,8 @@ impl<T> Environment<T> {
                 } => self.transfer_energy_from_food_to_bug(food_id, bug_id, delta_energy),
             }
         }
+
+        self.iteration += 1;
     }
 
     pub fn find_bug_by_id<'a>(&'a self, id: usize) -> Option<Ref<'a, Bug<T>>> {
@@ -485,5 +496,74 @@ impl<T> Environment<T> {
             Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
             self.now.clone(),
         )));
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SeededEnvironment<T> {
+    env: Environment<T>,
+    rng: Pcg64,
+}
+
+impl<T> SeededEnvironment<T> {
+    pub fn generate<Range: SampleRange<Float>>(
+        now: T,
+        seed: <Pcg64 as SeedableRng>::Seed,
+        food_sources: Vec<FoodSourceCreateInfo>,
+        x_range: Range,
+        y_range: Range,
+        food_e_range: Range,
+        food_count: usize,
+        bug_position: Point<Float>,
+    ) -> Self
+    where
+        Range: Clone,
+        T: Clone,
+    {
+        let mut rng = Pcg64::from_seed(seed);
+        Self {
+            env: Environment::generate(
+                now,
+                &mut rng,
+                food_sources,
+                x_range,
+                y_range,
+                food_e_range,
+                food_count,
+                bug_position,
+            ),
+            rng,
+        }
+    }
+
+    pub fn proceed(&mut self, dt: Duration)
+    where
+        T: TimePoint + Clone,
+    {
+        self.env.proceed(dt, &mut self.rng);
+    }
+
+    pub fn irradiate_area(&mut self, center: Point<Float>, radius: NoNeg<Float>) {
+        self.env.irradiate_area(center, radius, &mut self.rng);
+    }
+
+    pub fn add_food(&mut self, center: Point<Float>) {
+        self.env.add_food(center, &mut self.rng);
+    }
+
+    pub fn add_bug(&mut self, center: Point<Float>)
+    where
+        T: Clone,
+    {
+        self.env.add_bug(center, &mut self.rng);
+    }
+}
+
+// Note this impl does not brake SeededEnvironment invariant only if there is no immutable member function in Environment which accepts rng as argument
+impl<T> Deref for SeededEnvironment<T> {
+    type Target = Environment<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.env
     }
 }
