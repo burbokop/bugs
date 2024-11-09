@@ -6,11 +6,12 @@ use bugs_lib::{
     utils::{pretty_duration, Float},
 };
 use chrono::{DateTime, Utc};
-use clap::Parser;
+use clap::{ArgAction, Parser};
 use memory_stats::memory_stats;
 use rand_seeder::Seeder;
 use serde::Serialize;
 use std::{
+    num::ParseIntError,
     path::PathBuf,
     time::{Duration, Instant, SystemTime},
 };
@@ -22,17 +23,33 @@ enum Args {
     Load(LoadCommand),
 }
 
+fn parse_duration(arg: &str) -> Result<Duration, ParseIntError> {
+    Ok(Duration::from_secs(arg.parse()?))
+}
+
 /// Generates simulation environment using provided seed
 #[derive(Parser)]
 struct NewCommand {
     #[arg(short, long)]
     seed: String,
+    /// Timeout in seconds. Simulation will stop after reaching this time limit
+    #[arg(short, long, value_parser = parse_duration)]
+    timeout: Option<Duration>,
+    /// If true, continuously checks memory in another thread and panics if it reaches maximum
+    #[arg(long, action = ArgAction::Set, default_value = "true")]
+    check_memory_usage: bool,
 }
 
 /// Loads simulation environment from json save file
 #[derive(Parser)]
 struct LoadCommand {
     file: PathBuf,
+    /// Timeout in seconds. Simulation will stop after reaching this time limit
+    #[arg(short, long, value_parser = parse_duration)]
+    timeout: Option<Duration>,
+    /// If true, continuously checks memory in another thread and panics if it reaches maximum
+    #[arg(long, action = ArgAction::Set, default_value = "true")]
+    check_memory_usage: bool,
 }
 
 fn save<T: Serialize>(environment: &SeededEnvironment<T>) {
@@ -52,17 +69,25 @@ fn main() {
     let args = Args::parse();
     let the_beginning_of_times = StaticTimePoint::default();
 
-    let mut environment = match args {
-        Args::New(new_command) => {
-            println!("Run simulation with seed: {}", new_command.seed);
-            env_presets::less_food_further_from_center(
-                the_beginning_of_times.clone(),
-                Seeder::from(new_command.seed).make_seed(),
+    let (mut environment, timeout, check_memory_usage) = match args {
+        Args::New(command) => {
+            println!("Run simulation with seed: {}", command.seed);
+            (
+                env_presets::less_food_further_from_center(
+                    the_beginning_of_times.clone(),
+                    Seeder::from(command.seed).make_seed(),
+                ),
+                command.timeout,
+                command.check_memory_usage,
             )
         }
-        Args::Load(load_command) => {
-            println!("Run simulation from file: {:?}", load_command.file);
-            serde_json::from_str(&std::fs::read_to_string(load_command.file).unwrap()).unwrap()
+        Args::Load(command) => {
+            println!("Run simulation from file: {:?}", command.file);
+            (
+                serde_json::from_str(&std::fs::read_to_string(command.file).unwrap()).unwrap(),
+                command.timeout,
+                command.check_memory_usage,
+            )
         }
     };
 
@@ -71,21 +96,32 @@ fn main() {
         environment.bugs().next().unwrap().chromosome().genes
     );
 
-    std::thread::spawn(|| loop {
-        if let Some(usage) = memory_stats() {
-            if usage.physical_mem > 1024 * 1024 * 1024 {
-                panic!("Current memory usage exceeds limit: {:?}", usage);
+    if let Some(timeout) = timeout {
+        println!("Timeout is set to: {}", pretty_duration(timeout));
+    }
+
+    println!("Check memory usage: {}", check_memory_usage);
+
+    if check_memory_usage {
+        std::thread::spawn(|| loop {
+            println!("xxx");
+
+            if let Some(usage) = memory_stats() {
+                if usage.physical_mem > 1024 * 1024 * 1024 {
+                    panic!("Current memory usage exceeds limit: {:?}", usage);
+                }
+            } else {
+                panic!("Couldn't get the current memory usage");
             }
-        } else {
-            panic!("Couldn't get the current memory usage");
-        }
-        std::thread::sleep(Duration::from_secs(1));
-    });
+            std::thread::sleep(Duration::from_secs(1));
+        });
+    }
 
     let sim_dt = Duration::from_millis(1000 / 30);
-    let mut last_cycle_instant = Instant::now();
-    let mut last_log_instant = last_cycle_instant.clone();
-    let mut last_save_instant = last_cycle_instant.clone();
+    let mut real_simulation_start_time = Instant::now();
+    let mut last_cycle_instant = real_simulation_start_time.clone();
+    let mut last_log_instant = real_simulation_start_time.clone();
+    let mut last_save_instant = real_simulation_start_time.clone();
     while environment.bugs_count() > 0 {
         environment.proceed(sim_dt);
         let now = Instant::now();
@@ -109,6 +145,11 @@ fn main() {
         if now - last_save_instant > Duration::from_secs(60 * 5) {
             save(&environment);
             last_save_instant = now
+        }
+
+        if Some(now - real_simulation_start_time) > timeout {
+            save(&environment);
+            break;
         }
     }
 }
