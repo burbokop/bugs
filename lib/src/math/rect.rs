@@ -1,7 +1,7 @@
 use crate::range::Range;
 use std::ops::{Add, Div, Sub};
 
-use super::{Point, Size, Two};
+use super::{NoNeg, Point, Size, Sqr, Two};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Rect<T> {
@@ -12,6 +12,22 @@ pub struct Rect<T> {
 }
 
 impl<T> Rect<T> {
+    pub fn x(&self) -> &T {
+        &self.x
+    }
+
+    pub fn y(&self) -> &T {
+        &self.y
+    }
+
+    pub fn w(&self) -> &T {
+        &self.w
+    }
+
+    pub fn h(&self) -> &T {
+        &self.h
+    }
+
     pub fn left(&self) -> T
     where
         T: Clone,
@@ -144,6 +160,24 @@ impl<T> Rect<T> {
         }
     }
 
+    pub(crate) fn center(&self) -> Point<T>
+    where
+        T: Two + Add<Output = T> + Div<Output = T> + Clone,
+    {
+        (
+            self.x.clone() + self.w.clone() / T::two(),
+            self.y.clone() + self.h.clone() / T::two(),
+        )
+            .into()
+    }
+
+    pub(crate) fn size(&self) -> Size<T>
+    where
+        T: Clone,
+    {
+        (self.w.clone(), self.h.clone()).into()
+    }
+
     pub(crate) fn x_range(&self) -> Range<T>
     where
         T: Clone + Add<Output = T>,
@@ -174,6 +208,10 @@ impl<T> Rect<T> {
             && other.bottom() <= self.bottom();
     }
 
+    pub fn contains_point(&self, other: &Point<T>) -> bool {
+        todo!()
+    }
+
     pub fn instersects(&self, other: &Rect<T>) -> bool
     where
         T: PartialOrd + Add<Output = T> + Clone,
@@ -185,6 +223,47 @@ impl<T> Rect<T> {
         let t = max(self.top(), other.top());
         let b = min(self.bottom(), other.bottom());
         return l < r && t < b;
+    }
+
+    pub(crate) fn instersects_circle(&self, center: Point<T>, radius: NoNeg<T>) -> bool
+    where
+        T: Add<Output = T> + Sub<Output = T> + Clone + Sqr<Output = T> + PartialOrd,
+    {
+        let cx = center.x();
+        let cy = center.y();
+
+        let rx = self.x.clone();
+        let ry = self.y.clone();
+        let rw = self.w.clone();
+        let rh = self.h.clone();
+
+        // temporary variables to set edges for testing
+        let mut test_x = cx.clone();
+        let mut test_y = cy.clone();
+
+        // which edge is closest?
+        if *cx < rx {
+            test_x = rx.clone();
+        }
+        // test left edge
+        else if *cx > rx.clone() + rw.clone() {
+            test_x = rx.clone() + rw.clone();
+        } // right edge
+        if *cy < ry {
+            test_y = ry.clone();
+        }
+        // top edge
+        else if *cy > ry.clone() + rh.clone() {
+            test_y = ry.clone() + rh.clone();
+        } // bottom edge
+
+        // get distance from closest edges
+        let dist_x = cx.clone() - test_x;
+        let dist_y = cy.clone() - test_y;
+        let distance_sqr = dist_x.sqr() + dist_y.sqr();
+
+        // if the distance is less than the radius, collision!
+        distance_sqr <= radius.unwrap().sqr()
     }
 }
 
@@ -202,5 +281,18 @@ impl<T> From<(T, T, T, T)> for Rect<T> {
             w: value.2,
             h: value.3,
         }
+    }
+}
+
+impl<T> Div<T> for Rect<T>
+where
+    T: Two + Add<Output = T> + Div<Output = T> + Sub<Output = T> + Clone,
+{
+    type Output = Rect<T>;
+
+    fn div(self, rhs: T) -> Self::Output {
+        let c = self.center();
+        let s = self.size();
+        Self::Output::from_center(c, s / rhs)
     }
 }

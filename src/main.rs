@@ -5,7 +5,7 @@ use bugs_lib::time_point::{StaticTimePoint, TimePoint as _};
 use bugs_lib::utils::{pretty_duration, Color, Float};
 use clap::Parser;
 use rand::Rng;
-use render::{BrainRenderModel, Camera, EnvironmentRenderModel};
+use render::{BrainRenderModel, Camera, ChunksDisplayMode, EnvironmentRenderModel};
 use slint::{CloseRequestResponse, ComponentHandle, PlatformError, Timer, TimerMode};
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -64,6 +64,7 @@ struct State {
     active_tool: Tool,
     tool_action_point: Option<Point<Float>>,
     tool_action_active: bool,
+    chunks_display_mode: ChunksDisplayMode,
 }
 
 #[derive(Parser)]
@@ -151,6 +152,7 @@ pub fn main() -> Result<(), PlatformError> {
         active_tool: Tool::None,
         tool_action_point: None,
         tool_action_active: false,
+        chunks_display_mode: ChunksDisplayMode::None,
     }));
 
     let timer = Timer::default();
@@ -305,8 +307,14 @@ pub fn main() -> Result<(), PlatformError> {
         main_window.on_key_release_event(move |text| {
             let state = weak_state.upgrade().unwrap();
             let mut state = state.try_borrow_mut().unwrap();
+
+            let f1 = [0xEF, 0x9C, 0x84];
+
             if let Ok(lvl) = text.parse::<u32>() {
                 state.time_speed = (2_u32).pow(lvl) as f64;
+                true
+            } else if text.as_str().as_bytes() == f1 {
+                state.chunks_display_mode = state.chunks_display_mode.clone().rotated();
                 true
             } else if text == "q" {
                 std::fs::write(
@@ -374,6 +382,7 @@ pub fn main() -> Result<(), PlatformError> {
                     state.active_tool,
                     state.tool_action_point,
                     state.tool_action_active,
+                    state.chunks_display_mode.clone(),
                     window.get_requested_env_canvas_width() as u32,
                     window.get_requested_env_canvas_height() as u32,
                 );
@@ -389,7 +398,7 @@ pub fn main() -> Result<(), PlatformError> {
                     pause: state.pause,
                     time_speed: state.time_speed as f32,
                     bugs_count: state.environment.bugs_count() as i32,
-                    food_count: state.environment.food().len() as i32,
+                    food_count: state.environment.food_count() as i32,
                 });
                 window.set_fps(1. / dt.as_secs_f32());
                 window.set_tps(state.tps as f32);

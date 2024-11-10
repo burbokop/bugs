@@ -1,3 +1,5 @@
+use std::ops::Div;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -21,5 +23,19 @@ impl<T> Size<T> {
     }
     pub fn h(&self) -> &T {
         &self.h
+    }
+}
+
+impl<T> Div<T> for Size<T>
+where
+    T: Div<Output = T> + Clone,
+{
+    type Output = Size<T>;
+
+    fn div(self, rhs: T) -> Self::Output {
+        Self::Output {
+            w: self.w / rhs.clone(),
+            h: self.h / rhs,
+        }
     }
 }

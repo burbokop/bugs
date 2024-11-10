@@ -1,6 +1,7 @@
 pub mod brain;
 pub mod bug;
 pub mod chromo_utils;
+pub mod chunk;
 pub mod environment;
 pub mod math;
 pub mod range;
