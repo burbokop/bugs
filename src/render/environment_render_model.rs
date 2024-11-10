@@ -1,13 +1,37 @@
 use super::Camera;
-use crate::{app_utils::color_to_sdl2_rgba_color, Tool, NUKE_RADIUS};
+use crate::{
+    app_utils::{color_to_sdl2_rgba_color, rect_to_sdl2_rect},
+    Tool, NUKE_RADIUS,
+};
 use bugs_lib::{
     environment::Environment,
     math::{Complex, DeltaAngle, Point, Rect, Size},
     utils::Float,
 };
-use sdl2::{gfx::primitives::DrawRenderer, pixels::Color, surface::Surface};
+use font_loader::system_fonts;
+use sdl2::{
+    gfx::primitives::DrawRenderer, pixels::Color, render::TextureQuery, rwops::RWops,
+    surface::Surface,
+};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 use std::f64::consts::PI;
+
+#[derive(Debug, Clone)]
+pub(crate) enum ChunksDisplayMode {
+    FoodChunks,
+    BugChunks,
+    None,
+}
+
+impl ChunksDisplayMode {
+    pub(crate) fn rotated(self) -> Self {
+        match self {
+            ChunksDisplayMode::FoodChunks => ChunksDisplayMode::BugChunks,
+            ChunksDisplayMode::BugChunks => ChunksDisplayMode::None,
+            ChunksDisplayMode::None => ChunksDisplayMode::FoodChunks,
+        }
+    }
+}
 
 pub struct EnvironmentRenderModel {
     buffer: SharedPixelBuffer<Rgba8Pixel>,
@@ -30,6 +54,7 @@ impl EnvironmentRenderModel {
         active_tool: Tool,
         tool_action_point: Option<Point<Float>>,
         tool_action_active: bool,
+        chunks_display_mode: ChunksDisplayMode,
         requested_canvas_width: u32,
         requested_canvas_height: u32,
     ) -> Image {
@@ -56,6 +81,20 @@ impl EnvironmentRenderModel {
             .unwrap();
 
             let mut canvas = surface.into_canvas().unwrap();
+
+            let mut property = system_fonts::FontPropertyBuilder::new().monospace().build();
+            let sysfonts = system_fonts::query_specific(&mut property);
+            let font_bytes = system_fonts::get(
+                &system_fonts::FontPropertyBuilder::new()
+                    .family(sysfonts.first().unwrap())
+                    .build(),
+            )
+            .unwrap();
+            let rwops = RWops::from_bytes(&font_bytes.0[..]).unwrap();
+
+            let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string()).unwrap();
+
+            let font = ttf_context.load_font_from_rwops(rwops, 12).unwrap();
 
             let transformation = camera.transformation();
 
@@ -104,6 +143,36 @@ impl EnvironmentRenderModel {
             }
             let scale = Float::max(*transformation.scale_x(), *transformation.scale_y());
 
+            match chunks_display_mode {
+                ChunksDisplayMode::FoodChunks => {
+                    for c in environment.food_chunks() {
+                        let rect = &transformation
+                            * &Rect::from((
+                                c.0.x() as Float * 256.,
+                                c.0.y() as Float * 256.,
+                                256.,
+                                256.,
+                            ));
+                        canvas.set_draw_color(Color::RGB(0, 255, 0));
+                        canvas.draw_rect(rect_to_sdl2_rect(&rect)).unwrap();
+                    }
+                }
+                ChunksDisplayMode::BugChunks => {
+                    for c in environment.bug_chunks() {
+                        let rect = &transformation
+                            * &Rect::from((
+                                c.0.x() as Float * 256.,
+                                c.0.y() as Float * 256.,
+                                256.,
+                                256.,
+                            ));
+                        canvas.set_draw_color(Color::RGB(0, 0, 255));
+                        canvas.draw_rect(rect_to_sdl2_rect(&rect)).unwrap();
+                    }
+                }
+                ChunksDisplayMode::None => {}
+            }
+
             canvas.set_draw_color(Color::RGB(255, 183, 195));
             for bug in environment.bugs() {
                 let position = &transformation * &bug.position();
@@ -124,7 +193,10 @@ impl EnvironmentRenderModel {
 
                 let aabb = Rect::from_center(position, (radius * 2., radius * 2.).into());
 
-                if view_port_rect.contains(&aabb) || view_port_rect.instersects(&aabb) {
+                if view_port_rect.contains(&aabb)
+                    || view_port_rect.instersects(&aabb)
+                    || Some(bug.id()) == *selected_bug_id
+                {
                     let p0 = complexible::complex_numbers::ComplexNumber::from_cartesian(
                         4. * size,
                         0. * size,
@@ -239,6 +311,55 @@ impl EnvironmentRenderModel {
                                 Color::RGB(255, 183, 3),
                             )
                             .unwrap();
+
+                        let chunks_info: Option<(Box<dyn Iterator<Item = (isize, isize)>>, Color)> =
+                            match chunks_display_mode {
+                                ChunksDisplayMode::FoodChunks => Some((
+                                    Box::new(environment.food_chunks_circular_traverse_iter(
+                                        bug.position(),
+                                        bug.vision_range(),
+                                    )),
+                                    Color::RGB(255, 0, 0),
+                                )),
+                                ChunksDisplayMode::BugChunks => Some((
+                                    Box::new(environment.bug_chunks_circular_traverse_iter(
+                                        bug.position(),
+                                        bug.vision_range(),
+                                    )),
+                                    Color::RGB(255, 255, 0),
+                                )),
+                                ChunksDisplayMode::None => None,
+                            };
+
+                        if let Some((chunks_iter, chunks_color)) = chunks_info {
+                            for (i, (x, y)) in chunks_iter.enumerate() {
+                                let rect = &transformation
+                                    * &Rect::from((
+                                        x as Float * 256.,
+                                        y as Float * 256.,
+                                        256.,
+                                        256.,
+                                    ));
+                                canvas.set_draw_color(chunks_color);
+                                canvas.draw_rect(rect_to_sdl2_rect(&rect)).unwrap();
+
+                                let texture_creator = canvas.texture_creator();
+                                let surface = font
+                                    .render(&format!("{}", i))
+                                    .blended(chunks_color)
+                                    .map_err(|e| e.to_string())
+                                    .unwrap();
+                                let texture = texture_creator
+                                    .create_texture_from_surface(&surface)
+                                    .map_err(|e| e.to_string())
+                                    .unwrap();
+
+                                let TextureQuery { width, height, .. } = texture.query();
+                                canvas
+                                    .copy(&texture, None, rect_to_sdl2_rect(&(rect / 2.)))
+                                    .unwrap();
+                            }
+                        }
                     }
                 }
             }
@@ -270,7 +391,7 @@ impl EnvironmentRenderModel {
                         .filled_circle(
                             *tool_action_point.x() as i16,
                             *tool_action_point.y() as i16,
-                            (10. * scale) as i16,
+                            5,
                             if active_tool == Tool::Food {
                                 Color::RGB(183, 255, 3)
                             } else {

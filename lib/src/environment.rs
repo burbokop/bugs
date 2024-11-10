@@ -7,7 +7,8 @@ use std::{
 
 use crate::{
     bug::Bug,
-    chromo_utils::ExtendedChromosome,
+    chromo_utils::ExtendedChromosome as _,
+    chunk::{ChunkedVec, Position, RawChunkIndex},
     math::{noneg_float, Angle, NoNeg, Point, Rect, Size},
     range::Range,
     time_point::TimePoint,
@@ -131,6 +132,12 @@ impl Food {
     }
 }
 
+impl Position for Food {
+    fn position(&self) -> Point<Float> {
+        self.position
+    }
+}
+
 pub struct FoodCreateInfo {
     pub position: Point<Float>,
     pub energy: NoNeg<Float>,
@@ -224,9 +231,9 @@ pub(crate) enum EnvironmentRequest {
 
 #[derive(Serialize, Deserialize)]
 pub struct Environment<T> {
-    food: Vec<Food>,
+    food: ChunkedVec<Food, 256, 256>,
     food_sources: Vec<FoodSource<T>>,
-    bugs: Vec<RefCell<Bug<T>>>,
+    bugs: ChunkedVec<RefCell<Bug<T>>, 256, 256>,
     creation_time: T,
     now: T,
     next_food_id: usize,
@@ -342,9 +349,9 @@ impl<T> Environment<T> {
         )];
 
         Self {
-            food,
+            food: food.into_iter().collect(),
             food_sources,
-            bugs,
+            bugs: bugs.into_iter().collect(),
             creation_time: now.clone(),
             now,
             next_bug_id,
@@ -392,7 +399,7 @@ impl<T> Environment<T> {
         }
 
         let mut requests: Vec<EnvironmentRequest> = Default::default();
-        for b in &self.bugs {
+        for b in self.bugs.iter() {
             requests.append(&mut b.borrow_mut().proceed(&self, dt, rng));
         }
 
@@ -443,11 +450,11 @@ impl<T> Environment<T> {
         bug_id: usize,
         delta_energy: NoNeg<Float>,
     ) {
-        if let Some(bug_index) = self.bugs.iter().position(|b| b.borrow().id() == bug_id) {
-            if let Some(food_index) = self.food.iter().position(|b| b.id() == food_id) {
-                if self.bugs[bug_index]
+        if let Some(bug) = self.bugs.iter().find(|b| b.borrow().id() == bug_id) {
+            if let Some(food_index) = self.food.position(|b| b.id() == food_id) {
+                if bug
                     .borrow_mut()
-                    .eat(&mut self.food[food_index], delta_energy)
+                    .eat(&mut self.food[food_index.clone()], delta_energy)
                 {
                     self.food.remove(food_index);
                 }
@@ -455,8 +462,20 @@ impl<T> Environment<T> {
         }
     }
 
-    pub fn food(&self) -> &[Food] {
-        &self.food
+    pub fn food(&self) -> impl Iterator<Item = &Food> {
+        self.food.iter()
+    }
+
+    pub fn food_count(&self) -> usize {
+        self.food.len()
+    }
+
+    pub(crate) fn find_nearest_food(
+        &self,
+        position: Point<Float>,
+        range: NoNeg<Float>,
+    ) -> Option<(&Food, NoNeg<Float>)> {
+        self.food.find_nearest(position, range)
     }
 
     pub fn food_sources(&self) -> &[FoodSource<T>] {
@@ -533,6 +552,36 @@ impl<T> Environment<T> {
             Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
             self.now.clone(),
         )));
+    }
+
+    pub fn food_chunks(&self) -> Vec<(RawChunkIndex, usize)> {
+        self.food.chunks()
+    }
+
+    pub fn food_chunks_circular_traverse_iter(
+        &self,
+        position: Point<Float>,
+        range: NoNeg<Float>,
+    ) -> impl Iterator<Item = (isize, isize)> {
+        self.food.circular_traverse_iter(position, range).map(|a| {
+            let i: RawChunkIndex = a.into();
+            (i.x(), i.y())
+        })
+    }
+
+    pub fn bug_chunks(&self) -> Vec<(RawChunkIndex, usize)> {
+        self.bugs.chunks()
+    }
+
+    pub fn bug_chunks_circular_traverse_iter(
+        &self,
+        position: Point<Float>,
+        range: NoNeg<Float>,
+    ) -> impl Iterator<Item = (isize, isize)> {
+        self.bugs.circular_traverse_iter(position, range).map(|a| {
+            let i: RawChunkIndex = a.into();
+            (i.x(), i.y())
+        })
     }
 }
 

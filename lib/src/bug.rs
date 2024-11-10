@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::{cell::Ref, error::Error, f64::consts::PI, fmt::Display, ops::Deref, time::Duration};
 
 use chromosome::Chromosome;
@@ -8,6 +9,7 @@ use serde::{Deserialize, Serialize};
 #[deprecated]
 pub const EAT_FOOD_MAX_PROXIMITY: NoNeg<Float> = noneg_float(20.);
 
+use crate::chunk::Position;
 use crate::{
     brain::{self, Brain, VerboseOutput},
     chromo_utils::ExtendedChromosome as _,
@@ -74,6 +76,12 @@ pub struct Bug<T> {
     heat_level: NoNeg<Float>,
     #[serde(skip)]
     vision_range: NoNeg<Float>,
+}
+
+impl<T> Position for RefCell<Bug<T>> {
+    fn position(&self) -> Point<Float> {
+        self.borrow().position
+    }
 }
 
 impl<'de, T: Deserialize<'de>> Deserialize<'de> for Bug<T> {
@@ -409,17 +417,7 @@ impl<T> Bug<T> {
         &self,
         env: &'a Environment<T>,
     ) -> Option<(&'a Food, NoNeg<Float>)> {
-        env.food()
-            .iter()
-            .filter_map(|f| {
-                let dst = self.dst_to_food(f);
-                if dst < self.vision_range {
-                    Some((f, dst))
-                } else {
-                    None
-                }
-            })
-            .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+        env.find_nearest_food(self.position, self.vision_range)
     }
 
     fn reproduce_asexually<R: RngCore>(&self, rng: &mut R) -> EnvironmentRequest

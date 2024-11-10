@@ -135,7 +135,7 @@ fn main() {
                 environment.iteration(),
                 pretty_duration(environment.now().duration_since(&the_beginning_of_times)),
                 environment.bugs_count(),
-                environment.food().len(),
+                environment.food_count(),
                 time_speed,
                 environment.bugs_count() as Float * time_speed
             );

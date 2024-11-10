@@ -196,3 +196,11 @@ criterion_main!(benches);
 // find_nearest_bug  (small)         [3.1962 µs]
 // find_nearest_bug  (big)           [112.86 µs]
 // find_nearest_bug  (big, far)      [99.102 µs]
+
+// #5 chunk system applied to food
+// find_nearest_food (small)         [348.60 ns]
+// find_nearest_food (big)           [6.3736 µs]
+// find_nearest_food (big, far)      [46.268 ns]
+// find_nearest_bug (small)          [3.8314 µs]
+// find_nearest_bug (big)            [99.788 µs]
+// find_nearest_bug (big, far)       [115.90 µs]

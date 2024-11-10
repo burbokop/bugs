@@ -48,6 +48,14 @@ impl<T> Vector<T> {
     {
         self.x.abs() + self.y.abs()
     }
+
+    pub fn len_sqr(self) -> <<T as Sqr>::Output as Add>::Output
+    where
+        T: Sqr,
+        <T as Sqr>::Output: Add,
+    {
+        self.x.sqr() + self.y.sqr()
+    }
 }
 
 impl<T> Vector<T>
