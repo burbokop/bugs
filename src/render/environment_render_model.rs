@@ -1,6 +1,6 @@
 use super::Camera;
 use crate::{
-    app_utils::{color_to_sdl2_rgba_color, rect_to_sdl2_rect},
+    app_utils::{color_to_sdl2_rgba_color, point_to_sdl2_point, rect_to_sdl2_rect},
     Tool, NUKE_RADIUS,
 };
 use bugs_lib::{
@@ -10,11 +10,15 @@ use bugs_lib::{
 };
 use font_loader::system_fonts;
 use sdl2::{
-    gfx::primitives::DrawRenderer, pixels::Color, render::TextureQuery, rwops::RWops,
+    gfx::primitives::DrawRenderer,
+    pixels::Color,
+    render::{Canvas, TextureQuery},
+    rwops::RWops,
     surface::Surface,
+    ttf::Font,
 };
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
-use std::f64::consts::PI;
+use std::{f64::consts::PI, fmt::format};
 
 #[derive(Debug, Clone)]
 pub(crate) enum ChunksDisplayMode {
@@ -42,6 +46,36 @@ impl Default for EnvironmentRenderModel {
         Self {
             buffer: SharedPixelBuffer::new(0, 0),
         }
+    }
+}
+
+fn draw_centered_text(
+    canvas: &mut Canvas<Surface>,
+    font: &Font,
+    text: &str,
+    center: Point<Float>,
+    color: Color,
+) {
+    if text.len() > 0 {
+        let texture_creator = canvas.texture_creator();
+        let surface = font
+            .render(text)
+            .blended(color)
+            .map_err(|e| e.to_string())
+            .unwrap();
+        let texture = texture_creator
+            .create_texture_from_surface(&surface)
+            .map_err(|e| e.to_string())
+            .unwrap();
+
+        let TextureQuery { width, height, .. } = texture.query();
+        canvas
+            .copy(
+                &texture,
+                None,
+                sdl2::rect::Rect::from_center(point_to_sdl2_point(&center), width, height),
+            )
+            .unwrap();
     }
 }
 
@@ -94,7 +128,7 @@ impl EnvironmentRenderModel {
 
             let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string()).unwrap();
 
-            let font = ttf_context.load_font_from_rwops(rwops, 12).unwrap();
+            let font = ttf_context.load_font_from_rwops(rwops, 16).unwrap();
 
             let transformation = camera.transformation();
 
@@ -155,6 +189,13 @@ impl EnvironmentRenderModel {
                             ));
                         canvas.set_draw_color(Color::RGB(0, 255, 0));
                         canvas.draw_rect(rect_to_sdl2_rect(&rect)).unwrap();
+                        draw_centered_text(
+                            &mut canvas,
+                            &font,
+                            &format!("{}", c.1),
+                            rect.center(),
+                            Color::RGB(0, 255, 0),
+                        );
                     }
                 }
                 ChunksDisplayMode::BugChunks => {
@@ -168,6 +209,13 @@ impl EnvironmentRenderModel {
                             ));
                         canvas.set_draw_color(Color::RGB(0, 0, 255));
                         canvas.draw_rect(rect_to_sdl2_rect(&rect)).unwrap();
+                        draw_centered_text(
+                            &mut canvas,
+                            &font,
+                            &format!("{}", c.1),
+                            rect.center(),
+                            Color::RGB(0, 0, 255),
+                        );
                     }
                 }
                 ChunksDisplayMode::None => {}
@@ -266,10 +314,6 @@ impl EnvironmentRenderModel {
                                         Color::RGB(0, 255, 0),
                                     )
                                     .unwrap();
-
-                                // println!("aaa: {} - {} = {}", direction_to_nearest_food, bug.rotation(), direction_to_nearest_food.signed_distance(bug.rotation()));
-                                // println!("bbb: {} - {} = {}", direction_to_nearest_food.degrees(), bug.rotation().degrees(), direction_to_nearest_food.signed_distance(bug.rotation()).degrees());
-                                // println!("ccc: {} + {} = {}", bug.rotation(), log.output.relative_desired_rotation, bug.rotation() + log.output.relative_desired_rotation);
                             }
 
                             {

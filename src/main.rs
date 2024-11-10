@@ -309,12 +309,16 @@ pub fn main() -> Result<(), PlatformError> {
             let mut state = state.try_borrow_mut().unwrap();
 
             let f1 = [0xEF, 0x9C, 0x84];
+            let f2 = [0xEF, 0x9C, 0x85];
 
             if let Ok(lvl) = text.parse::<u32>() {
                 state.time_speed = (2_u32).pow(lvl) as f64;
                 true
             } else if text.as_str().as_bytes() == f1 {
                 state.chunks_display_mode = state.chunks_display_mode.clone().rotated();
+                true
+            } else if text.as_str().as_bytes() == f2 {
+                state.environment.collect_unused_chunks();
                 true
             } else if text == "q" {
                 std::fs::write(

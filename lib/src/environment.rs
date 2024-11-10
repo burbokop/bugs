@@ -1,4 +1,5 @@
 use std::{
+    borrow::Borrow,
     cell::{Ref, RefCell},
     f64::consts::PI,
     ops::Deref,
@@ -403,6 +404,8 @@ impl<T> Environment<T> {
             requests.append(&mut b.borrow_mut().proceed(&self, dt, rng));
         }
 
+        self.bugs.shuffle();
+
         for request in requests {
             match request {
                 EnvironmentRequest::Kill { id } => self.kill(id),
@@ -450,7 +453,7 @@ impl<T> Environment<T> {
         bug_id: usize,
         delta_energy: NoNeg<Float>,
     ) {
-        if let Some(bug) = self.bugs.iter().find(|b| b.borrow().id() == bug_id) {
+        if let Some(bug) = self.bugs.iter().find(|b| (*b).borrow().id() == bug_id) {
             if let Some(food_index) = self.food.position(|b| b.id() == food_id) {
                 if bug
                     .borrow_mut()
@@ -476,6 +479,15 @@ impl<T> Environment<T> {
         range: NoNeg<Float>,
     ) -> Option<(&Food, NoNeg<Float>)> {
         self.food.find_nearest(position, range)
+    }
+
+    pub(crate) fn find_nearest_bug<'a>(
+        &'a self,
+        position: Point<Float>,
+        range: NoNeg<Float>,
+    ) -> Option<(Ref<'a, Bug<T>>, NoNeg<Float>)> {
+        self.bugs
+            .find_nearest_filter_map(position, range, |x| x.try_borrow().ok())
     }
 
     pub fn food_sources(&self) -> &[FoodSource<T>] {
@@ -583,6 +595,11 @@ impl<T> Environment<T> {
             (i.x(), i.y())
         })
     }
+
+    pub(crate) fn collect_unused_chunks(&mut self) {
+        self.bugs.collect_unused_chunks();
+        self.food.collect_unused_chunks();
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -642,6 +659,10 @@ impl<T> SeededEnvironment<T> {
         T: Clone,
     {
         self.env.add_bug(center, &mut self.rng);
+    }
+
+    pub fn collect_unused_chunks(&mut self) {
+        self.env.collect_unused_chunks();
     }
 }
 

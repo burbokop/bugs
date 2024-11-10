@@ -22,7 +22,7 @@ pub(crate) trait Position {
     fn position(&self) -> Point<Float>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum ChunkType {
     FromTopLeft,
     FromTopRight,
@@ -38,6 +38,21 @@ where
         v.resize_with(i + 1, initialize);
     }
     &mut v[i]
+}
+
+fn remove_from_end_until<T, F>(v: &mut Vec<T>, mut pred: F)
+where
+    F: FnMut(&T) -> bool,
+{
+    let mut x = v.len() as isize - 1;
+    while x >= 0 {
+        if !pred(&v[x as usize]) {
+            v.remove(x as usize);
+            x -= 1
+        } else {
+            break;
+        }
+    }
 }
 
 impl ChunkType {
@@ -145,10 +160,9 @@ impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
     where
         T: Position,
     {
-        let position = v.position();
-        let index = RawChunkIndex::from_position::<W, H>(position).into();
-
-        self.get_or_insert_mut(index).items.push(v);
+        self.get_or_insert_mut(RawChunkIndex::from_position::<W, H>(v.position()).into())
+            .items
+            .push(v);
         self.len += 1;
     }
 
@@ -237,6 +251,39 @@ impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
         )
     }
 
+    pub(crate) fn find_nearest_filter_map<'a, B, F>(
+        &'a self,
+        position: Point<Float>,
+        range: NoNeg<Float>,
+        f: F,
+    ) -> Option<(B, NoNeg<Float>)>
+    where
+        B: Position,
+        F: FnMut(&'a T) -> Option<B> + Clone,
+    {
+        self.circular_traverse_iter(position, range).find_map(
+            |index| -> Option<(B, NoNeg<Float>)> {
+                if let Some(chunk) = self.get_chunk(index) {
+                    chunk
+                        .items
+                        .iter()
+                        .filter_map(f.clone())
+                        .filter_map(|other| {
+                            let dst = NoNeg::wrap((position - other.position()).len()).unwrap();
+                            if dst < range {
+                                Some((other, dst))
+                            } else {
+                                None
+                            }
+                        })
+                        .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+                } else {
+                    None
+                }
+            },
+        )
+    }
+
     pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.from_top_left
             .iter()
@@ -264,9 +311,57 @@ impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
         let inner_part = get_or_insert_mut(part, i.y, || Default::default());
         get_or_insert_mut(inner_part, i.x, || Default::default())
     }
+
+    /// Move all items to chunks corresponding to their position
+    pub(crate) fn shuffle(&mut self)
+    where
+        T: Position,
+    {
+        let mut recipes: Vec<(T, ChunkIndex)> = Default::default();
+        for tp in ChunkType::values() {
+            let rows = tp.clone().part_mut(self);
+            for y in 0..rows.len() {
+                let cols = &mut rows[y];
+                for x in 0..cols.len() {
+                    let items = &mut rows[y][x].items;
+                    let chunk_index = ChunkIndex {
+                        tp: tp.clone(),
+                        x,
+                        y,
+                    };
+
+                    let mut i = 0;
+                    while i < items.len() {
+                        let new_chunk_index: ChunkIndex =
+                            RawChunkIndex::from_position::<W, H>(items[i].position()).into();
+                        if chunk_index != new_chunk_index {
+                            recipes.push((items.remove(i), new_chunk_index));
+                        } else {
+                            i += 1
+                        }
+                    }
+                }
+            }
+        }
+
+        for (what, to_where) in recipes {
+            self.get_or_insert_mut(to_where).items.push(what);
+        }
+    }
+
+    pub(crate) fn collect_unused_chunks(&mut self) {
+        for tp in ChunkType::values() {
+            let rows = tp.clone().part_mut(self);
+            for y in (0..rows.len()).rev() {
+                let cols = &mut rows[y];
+                remove_from_end_until(cols, |c| c.items.len() > 0);
+            }
+            remove_from_end_until(rows, |x| x.len() > 0);
+        }
+    }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ChunkIndex {
     tp: ChunkType,
     x: usize,
