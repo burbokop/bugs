@@ -160,7 +160,7 @@ impl<T> Rect<T> {
         }
     }
 
-    pub(crate) fn center(&self) -> Point<T>
+    pub fn center(&self) -> Point<T>
     where
         T: Two + Add<Output = T> + Div<Output = T> + Clone,
     {

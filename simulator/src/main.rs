@@ -104,8 +104,6 @@ fn main() {
 
     if check_memory_usage {
         std::thread::spawn(|| loop {
-            println!("xxx");
-
             if let Some(usage) = memory_stats() {
                 if usage.physical_mem > 1024 * 1024 * 1024 {
                     panic!("Current memory usage exceeds limit: {:?}", usage);
@@ -118,7 +116,7 @@ fn main() {
     }
 
     let sim_dt = Duration::from_millis(1000 / 30);
-    let mut real_simulation_start_time = Instant::now();
+    let real_simulation_start_time = Instant::now();
     let mut last_cycle_instant = real_simulation_start_time.clone();
     let mut last_log_instant = real_simulation_start_time.clone();
     let mut last_save_instant = real_simulation_start_time.clone();
@@ -147,9 +145,11 @@ fn main() {
             last_save_instant = now
         }
 
-        if Some(now - real_simulation_start_time) > timeout {
-            save(&environment);
-            break;
+        if let Some(timeout) = timeout {
+            if now - real_simulation_start_time > timeout {
+                save(&environment);
+                break;
+            }
         }
     }
 }

@@ -74,7 +74,9 @@ pub(crate) fn sample_range_from_range<T: SampleUniform + PartialOrd>(
 }
 
 pub fn pretty_duration(duration: Duration) -> String {
-    if duration > Duration::from_secs(60 * 60) {
+    if duration > Duration::from_secs(60 * 60 * 24) {
+        return format!("{:.2} d", duration.as_secs_f64() / 60. / 60. / 24.);
+    } else if duration > Duration::from_secs(60 * 60) {
         return format!("{:.2} h", duration.as_secs_f64() / 60. / 60.);
     } else if duration > Duration::from_secs(60) {
         return format!("{:.2} m", duration.as_secs_f64() / 60.);
@@ -85,7 +87,7 @@ pub fn pretty_duration(duration: Duration) -> String {
     } else if duration > Duration::from_micros(1) {
         return format!("{:.2} µs", duration.as_nanos() as f64 / 1000.);
     } else {
-        return format!("{} ns", duration.as_nanos());
+        return format!("{:.2} ns", duration.as_nanos());
     }
 }
 

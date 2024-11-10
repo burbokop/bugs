@@ -42,9 +42,9 @@ impl<'de, T: Deserialize<'de> + IsNeg + Debug> Deserialize<'de> for NoNeg<T> {
     }
 }
 
-impl<T> Display for NoNeg<T> {
+impl<T: Display> Display for NoNeg<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+        self.value.fmt(f)
     }
 }
 

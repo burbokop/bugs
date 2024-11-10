@@ -84,6 +84,12 @@ impl<T> Position for RefCell<Bug<T>> {
     }
 }
 
+impl<'a, T> Position for Ref<'a, Bug<T>> {
+    fn position(&self) -> Point<Float> {
+        self.position
+    }
+}
+
 impl<'de, T: Deserialize<'de>> Deserialize<'de> for Bug<T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -401,16 +407,7 @@ impl<T> Bug<T> {
         &self,
         env: &'a Environment<T>,
     ) -> Option<(Ref<'a, Self>, NoNeg<Float>)> {
-        env.bugs()
-            .filter_map(|other| {
-                let dst = self.dst_to_bug(&other);
-                if dst < self.vision_range {
-                    Some((other, dst))
-                } else {
-                    None
-                }
-            })
-            .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+        env.find_nearest_bug(self.position, self.vision_range)
     }
 
     pub fn find_nearest_food<'a>(
