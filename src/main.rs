@@ -155,7 +155,7 @@ pub fn main() -> Result<(), PlatformError> {
         chunks_display_mode: ChunksDisplayMode::None,
     }));
 
-    let timer = Timer::default();
+    let timer = Rc::new(Timer::default());
     let mut last_tick_instant = Instant::now();
 
     {
@@ -192,6 +192,12 @@ pub fn main() -> Result<(), PlatformError> {
             },
         );
     }
+
+    let weak_timer = Rc::downgrade(&timer);
+    let set_desired_tps = move |tps: Float| {
+        let timer = weak_timer.upgrade().unwrap();
+        timer.set_interval(std::time::Duration::from_millis((1000. / tps) as u64));
+    };
 
     let main_window = MainWindow::new().unwrap();
 
@@ -313,6 +319,12 @@ pub fn main() -> Result<(), PlatformError> {
 
             if let Ok(lvl) = text.parse::<u32>() {
                 state.time_speed = (2_u32).pow(lvl) as f64;
+                match lvl {
+                    9 => set_desired_tps(240.),
+                    8 => set_desired_tps(120.),
+                    7 => set_desired_tps(60.),
+                    _ => set_desired_tps(30.),
+                }
                 true
             } else if text.as_str().as_bytes() == f1 {
                 state.chunks_display_mode = state.chunks_display_mode.clone().rotated();
