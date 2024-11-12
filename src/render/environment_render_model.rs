@@ -5,7 +5,7 @@ use crate::{
 };
 use bugs_lib::{
     environment::Environment,
-    math::{Complex, DeltaAngle, Point, Rect, Size},
+    math::{map_into_range, Complex, DeltaAngle, NoNeg, Point, Rect, Size},
     utils::Float,
 };
 use font_loader::system_fonts;
@@ -18,12 +18,13 @@ use sdl2::{
     ttf::Font,
 };
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
-use std::{f64::consts::PI, fmt::format};
+use std::f64::consts::PI;
 
 #[derive(Debug, Clone)]
 pub(crate) enum ChunksDisplayMode {
     FoodChunks,
     BugChunks,
+    Both,
     None,
 }
 
@@ -31,7 +32,8 @@ impl ChunksDisplayMode {
     pub(crate) fn rotated(self) -> Self {
         match self {
             ChunksDisplayMode::FoodChunks => ChunksDisplayMode::BugChunks,
-            ChunksDisplayMode::BugChunks => ChunksDisplayMode::None,
+            ChunksDisplayMode::BugChunks => ChunksDisplayMode::Both,
+            ChunksDisplayMode::Both => ChunksDisplayMode::None,
             ChunksDisplayMode::None => ChunksDisplayMode::FoodChunks,
         }
     }
@@ -76,6 +78,57 @@ fn draw_centered_text(
                 sdl2::rect::Rect::from_center(point_to_sdl2_point(&center), width, height),
             )
             .unwrap();
+    }
+}
+
+fn draw_chunk(
+    canvas: &mut Canvas<Surface>,
+    font: &Font,
+    rect: &Rect<Float>,
+    ocupants_count: usize,
+    color: Color,
+) {
+    let size_of_x = font.size_of_char('X').unwrap();
+    if size_of_x.0 as Float > *rect.w() || size_of_x.1 as Float > *rect.h() {
+        let max_ocupants_count = 8;
+        canvas.set_blend_mode(sdl2::render::BlendMode::Blend);
+        canvas.set_draw_color(if ocupants_count >= max_ocupants_count {
+            color
+        } else {
+            Color::RGBA(
+                color.r,
+                color.g,
+                color.b,
+                map_into_range(
+                    ocupants_count as Float,
+                    0. ..max_ocupants_count as Float,
+                    (color.a as Float / 16.)..color.a as Float,
+                ) as u8,
+            )
+        });
+
+        canvas
+            .fill_rect(rect_to_sdl2_rect(&rect.clone().extended((1., 1.).into())))
+            .unwrap();
+    } else {
+        canvas.set_blend_mode(sdl2::render::BlendMode::Blend);
+        canvas.set_draw_color(if ocupants_count > 0 {
+            color
+        } else {
+            Color::RGBA(color.r, color.g, color.b, color.a / 4)
+        });
+        canvas
+            .draw_rect(rect_to_sdl2_rect(&rect.clone().extended((1., 1.).into())))
+            .unwrap();
+        if ocupants_count > 0 {
+            draw_centered_text(
+                canvas,
+                &font,
+                &format!("{}", ocupants_count),
+                rect.center(),
+                color,
+            );
+        }
     }
 }
 
@@ -179,43 +232,80 @@ impl EnvironmentRenderModel {
 
             match chunks_display_mode {
                 ChunksDisplayMode::FoodChunks => {
-                    for c in environment.food_chunks() {
+                    for (index, ocupants_count) in environment.food_chunks() {
                         let rect = &transformation
                             * &Rect::from((
-                                c.0.x() as Float * 256.,
-                                c.0.y() as Float * 256.,
+                                index.x() as Float * 256.,
+                                index.y() as Float * 256.,
                                 256.,
                                 256.,
                             ));
-                        canvas.set_draw_color(Color::RGB(0, 255, 0));
-                        canvas.draw_rect(rect_to_sdl2_rect(&rect)).unwrap();
-                        draw_centered_text(
-                            &mut canvas,
-                            &font,
-                            &format!("{}", c.1),
-                            rect.center(),
-                            Color::RGB(0, 255, 0),
-                        );
+                        if view_port_rect.contains(&rect) || view_port_rect.instersects(&rect) {
+                            draw_chunk(
+                                &mut canvas,
+                                &font,
+                                &rect,
+                                ocupants_count,
+                                Color::RGB(255, 110, 162),
+                            )
+                        }
                     }
                 }
                 ChunksDisplayMode::BugChunks => {
-                    for c in environment.bug_chunks() {
+                    for (index, ocupants_count) in environment.bug_chunks() {
                         let rect = &transformation
                             * &Rect::from((
-                                c.0.x() as Float * 256.,
-                                c.0.y() as Float * 256.,
+                                index.x() as Float * 256.,
+                                index.y() as Float * 256.,
                                 256.,
                                 256.,
                             ));
-                        canvas.set_draw_color(Color::RGB(0, 0, 255));
-                        canvas.draw_rect(rect_to_sdl2_rect(&rect)).unwrap();
-                        draw_centered_text(
-                            &mut canvas,
-                            &font,
-                            &format!("{}", c.1),
-                            rect.center(),
-                            Color::RGB(0, 0, 255),
-                        );
+                        if view_port_rect.contains(&rect) || view_port_rect.instersects(&rect) {
+                            draw_chunk(
+                                &mut canvas,
+                                &font,
+                                &rect,
+                                ocupants_count,
+                                Color::RGB(0, 0, 255),
+                            )
+                        }
+                    }
+                }
+                ChunksDisplayMode::Both => {
+                    for (index, ocupants_count) in environment.food_chunks() {
+                        let rect = &transformation
+                            * &Rect::from((
+                                index.x() as Float * 256.,
+                                index.y() as Float * 256.,
+                                256.,
+                                256.,
+                            ));
+                        if view_port_rect.contains(&rect) || view_port_rect.instersects(&rect) {
+                            draw_chunk(
+                                &mut canvas,
+                                &font,
+                                &rect,
+                                ocupants_count,
+                                Color::RGB(255, 110, 162),
+                            )
+                        }
+                    }for (index, ocupants_count) in environment.bug_chunks() {
+                        let rect = &transformation
+                            * &Rect::from((
+                                index.x() as Float * 256.,
+                                index.y() as Float * 256.,
+                                256.,
+                                256.,
+                            ));
+                        if view_port_rect.contains(&rect) || view_port_rect.instersects(&rect) {
+                            draw_chunk(
+                                &mut canvas,
+                                &font,
+                                &rect,
+                                ocupants_count,
+                                Color::RGB(0, 0, 255),
+                            )
+                        }
                     }
                 }
                 ChunksDisplayMode::None => {}
@@ -372,6 +462,7 @@ impl EnvironmentRenderModel {
                                     )),
                                     Color::RGB(255, 255, 0),
                                 )),
+                                ChunksDisplayMode::Both => None,
                                 ChunksDisplayMode::None => None,
                             };
 
