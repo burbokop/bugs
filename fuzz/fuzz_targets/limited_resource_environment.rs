@@ -86,7 +86,7 @@ fuzz_target!(|data: &[u8]| {
                 i,
                 pretty_duration(environment.now().duration_since(&the_beginning_of_times)),
                 environment.bugs_count(),
-                environment.food().len()
+                environment.food_count(),
             );
             last_log_instant = now
         }

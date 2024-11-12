@@ -1,7 +1,7 @@
 use crate::range::Range;
-use std::ops::{Add, Div, Sub};
+use std::ops::{Add, Div, Mul, Sub};
 
-use super::{NoNeg, Point, Size, Sqr, Two};
+use super::{NoNeg, Point, Size, Sqr, Two, Vector};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Rect<T> {
@@ -264,6 +264,21 @@ impl<T> Rect<T> {
 
         // if the distance is less than the radius, collision!
         distance_sqr <= radius.unwrap().sqr()
+    }
+
+    pub fn extended(self, vec: Vector<T>) -> Rect<T>
+    where
+        T: Two + Sub<Output = T> + Add<Output = T> + Mul<Output = T> + Clone,
+    {
+        let (x, y) = vec.into();
+
+        (
+            self.x - x.clone(),
+            self.y - y.clone(),
+            self.w + x * T::two(),
+            self.h + y * T::two(),
+        )
+            .into()
     }
 }
 

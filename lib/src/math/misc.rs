@@ -8,7 +8,7 @@ use crate::range::{Range, RangeInclusive};
 
 use super::{MinusOne, One, Zero};
 
-pub(crate) fn map_into_range<T, I, O>(x: T, input: I, output: O) -> T
+pub fn map_into_range<T, I, O>(x: T, input: I, output: O) -> T
 where
     T: Clone + Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Div<Output = T>,
     I: Into<Range<T>>,

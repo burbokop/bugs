@@ -17,6 +17,12 @@ impl<T> From<(T, T)> for Vector<T> {
     }
 }
 
+impl<T> From<Vector<T>> for (T, T) {
+    fn from(value: Vector<T>) -> Self {
+        (value.x, value.y)
+    }
+}
+
 impl<T> Add for Vector<T>
 where
     T: Add,
