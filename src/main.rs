@@ -155,6 +155,14 @@ pub fn main() -> Result<(), PlatformError> {
         chunks_display_mode: ChunksDisplayMode::None,
     }));
 
+    let (ctrl_c_tx, ctrl_c_rx) = std::sync::mpsc::channel();
+    ctrlc::set_handler(move || {
+        ctrl_c_tx
+            .send(())
+            .expect("Could not send signal on channel.")
+    })
+    .expect("Error setting Ctrl-C handler");
+
     let timer = Rc::new(Timer::default());
     let mut last_tick_instant = Instant::now();
 
@@ -390,6 +398,7 @@ pub fn main() -> Result<(), PlatformError> {
 
         let weak_state = Rc::downgrade(&state);
         let weak_window = main_window.as_weak();
+        let save_path = save_path.clone();
         render_timer.start(TimerMode::Repeated, render_interval, move || {
             if let Some(window) = weak_window.upgrade() {
                 let now = Instant::now();
@@ -539,6 +548,16 @@ pub fn main() -> Result<(), PlatformError> {
                 }
 
                 window.window().request_redraw();
+
+                if let Ok(_) = ctrl_c_rx.try_recv() {
+                    println!("\nSaving into: {:?}...", &save_path);
+                    std::fs::write(
+                        &save_path,
+                        serde_json::to_string_pretty(&state.environment).unwrap(),
+                    )
+                    .unwrap();
+                    window.window().hide().unwrap();
+                }
             }
         });
     }

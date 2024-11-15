@@ -115,6 +115,14 @@ fn main() {
         });
     }
 
+    let (ctrl_c_tx, ctrl_c_rx) = std::sync::mpsc::channel();
+    ctrlc::set_handler(move || {
+        ctrl_c_tx
+            .send(())
+            .expect("Could not send signal on channel.")
+    })
+    .expect("Error setting Ctrl-C handler");
+
     let sim_dt = Duration::from_millis(1000 / 30);
     let real_simulation_start_time = Instant::now();
     let mut last_cycle_instant = real_simulation_start_time.clone();
@@ -150,6 +158,12 @@ fn main() {
                 save(&environment);
                 break;
             }
+        }
+
+        if let Ok(_) = ctrl_c_rx.try_recv() {
+            println!("\n");
+            save(&environment);
+            break;
         }
     }
 }
