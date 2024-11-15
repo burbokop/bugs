@@ -289,7 +289,8 @@ impl EnvironmentRenderModel {
                                 Color::RGB(255, 110, 162),
                             )
                         }
-                    }for (index, ocupants_count) in environment.bug_chunks() {
+                    }
+                    for (index, ocupants_count) in environment.bug_chunks() {
                         let rect = &transformation
                             * &Rect::from((
                                 index.x() as Float * 256.,
@@ -324,8 +325,7 @@ impl EnvironmentRenderModel {
                     *position.y(),
                 );
 
-                let radius =
-                    bugs_lib::bug::EAT_FOOD_MAX_PROXIMITY.unwrap() * scale * bug.size().unwrap();
+                let radius = bug.eat_range().unwrap() * scale;
 
                 let size = 5. * scale * bug.size().unwrap();
 
@@ -391,10 +391,8 @@ impl EnvironmentRenderModel {
                                     .unwrap();
                             }
 
-                            if let Some(direction_to_nearest_food) =
-                                log.input.direction_to_nearest_food
-                            {
-                                let rl = Complex::from_polar(radius, direction_to_nearest_food);
+                            if let Some(nearest_food) = &log.input.nearest_food {
+                                let rl = Complex::from_polar(radius, nearest_food.direction);
                                 canvas
                                     .line(
                                         *position.x() as i16,

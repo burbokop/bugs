@@ -221,6 +221,12 @@ pub fn main() -> Result<(), PlatformError> {
 
             if event_type == 0 {
                 if button == 0 {
+                    struct BugInfo {
+                        id: usize,
+                        position: Point<Float>,
+                        eat_range: NoNeg<Float>,
+                    }
+
                     let nearest_bug = state
                         .environment
                         .bugs()
@@ -230,13 +236,17 @@ pub fn main() -> Result<(), PlatformError> {
                                 .partial_cmp(&(point - b.position()).len())
                                 .unwrap()
                         })
-                        .map(|bug| (bug.id(), bug.position(), bug.size()));
+                        .map(|bug| BugInfo {
+                            id: bug.id(),
+                            position: bug.position(),
+                            eat_range: bug.eat_range(),
+                        });
 
                     if let Some(nearest_bug) = nearest_bug {
-                        state.selected_bug_id = if (point - nearest_bug.1).len()
-                            < (bugs_lib::bug::EAT_FOOD_MAX_PROXIMITY * nearest_bug.2).unwrap()
+                        state.selected_bug_id = if (point - nearest_bug.position).len()
+                            < nearest_bug.eat_range.unwrap()
                         {
-                            Some(nearest_bug.0)
+                            Some(nearest_bug.id)
                         } else {
                             None
                         };
@@ -463,38 +473,49 @@ pub fn main() -> Result<(), PlatformError> {
                         window.set_selected_bug_last_brain_log(BugBrainLog {
                             input: BugBrainInput {
                                 color_of_nearest_bug: color_to_slint_rgba_color(
-                                    &brain_log.input.color_of_nearest_bug.as_ref().unwrap_or(
-                                        &Color {
+                                    &brain_log
+                                        .input
+                                        .nearest_bug
+                                        .as_ref()
+                                        .map(|x| x.color.clone())
+                                        .unwrap_or(Color {
                                             a: 0.,
                                             r: 0.,
                                             g: 0.,
                                             b: 0.,
-                                        },
-                                    ),
+                                        }),
                                 )
                                 .into(),
                                 direction_to_nearest_bug: brain_log
                                     .input
-                                    .direction_to_nearest_bug
+                                    .nearest_bug
+                                    .as_ref()
+                                    .map(|x| x.direction)
                                     .unwrap_or(Angle::from_radians(0.))
                                     .degrees()
                                     as f32,
                                 direction_to_nearest_food: brain_log
                                     .input
-                                    .direction_to_nearest_food
+                                    .nearest_food
+                                    .as_ref()
+                                    .map(|x| x.direction)
                                     .unwrap_or(Angle::from_radians(0.))
                                     .degrees()
                                     as f32,
                                 rotation: brain_log.input.rotation.degrees() as f32,
                                 proximity_to_bug: brain_log
                                     .input
-                                    .proximity_to_bug
+                                    .nearest_bug
+                                    .as_ref()
+                                    .map(|x| x.dst)
                                     .unwrap_or(noneg_float(1.))
                                     .unwrap()
                                     as f32,
                                 proximity_to_food: brain_log
                                     .input
-                                    .proximity_to_food
+                                    .nearest_food
+                                    .as_ref()
+                                    .map(|x| x.dst)
                                     .unwrap_or(noneg_float(1.))
                                     .unwrap()
                                     as f32,
