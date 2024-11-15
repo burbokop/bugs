@@ -6,8 +6,7 @@ use rand::Rng;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
-#[deprecated]
-pub const EAT_FOOD_MAX_PROXIMITY: NoNeg<Float> = noneg_float(20.);
+const EAT_FOOD_MAX_PROXIMITY: NoNeg<Float> = noneg_float(20.);
 
 use crate::chunk::Position;
 use crate::{
@@ -253,6 +252,10 @@ impl<T> Bug<T> {
         self.vision_range
     }
 
+    pub fn eat_range(&self) -> NoNeg<Float> {
+        self.size * EAT_FOOD_MAX_PROXIMITY
+    }
+
     pub(crate) fn give_birth(
         next_id: &mut usize,
         chromosome: Chromosome<Float>,
@@ -458,46 +461,43 @@ impl<T> Bug<T> {
         if age <= noneg_float(1.) {
             struct NearestFoodInfo<'a> {
                 food: &'a Food,
-                dst: NoNeg<Float>,
-                direction: Angle<Float>,
-                size: NoNeg<Float>,
+                brain_input: brain::FoodInfo,
             }
 
             struct NearestBugInfo {
-                dst: NoNeg<Float>,
-                direction: Angle<Float>,
-                color: Color,
+                brain_input: brain::BugInfo,
             }
 
             let nearest_food = self
                 .find_nearest_food(env)
                 .map(|(food, dst)| NearestFoodInfo {
                     food,
-                    dst,
-                    direction: self.direction_to_food(food),
-                    size: food.energy(),
+                    brain_input: brain::FoodInfo {
+                        dst,
+                        direction: self.direction_to_food(food),
+                        relative_radius: food.radius() / self.eat_range(),
+                    },
                 });
 
             let nearest_bug = self.find_nearest_bug(env).map(|(bug, dst)| NearestBugInfo {
-                dst,
-                direction: self.direction_to_bug(&bug),
-                color: bug.color.clone(),
+                brain_input: brain::BugInfo {
+                    dst,
+                    direction: self.direction_to_bug(&bug),
+                    color: bug.color.clone(),
+                    relative_radius: bug.eat_range() / self.eat_range(),
+                },
             });
 
             let brain_input = brain::Input {
                 energy_level: self.energy_level,
                 energy_capacity: self.energy_capacity(),
                 rotation: self.rotation,
-                proximity_to_food: nearest_food.as_ref().map(|x| x.dst),
-                direction_to_nearest_food: nearest_food.as_ref().map(|x| x.direction),
-                size_of_nearest_food: nearest_food.as_ref().map(|x| x.size),
                 age,
-                proximity_to_bug: nearest_bug.as_ref().map(|x| x.dst),
-                direction_to_nearest_bug: nearest_bug.as_ref().map(|x| x.direction),
-                color_of_nearest_bug: nearest_bug.as_ref().map(|x| x.color.clone()),
                 baby_charge_level: self.baby_charge_level,
                 baby_charge_capacity: self.baby_charge_capacity(),
                 vision_range: self.vision_range,
+                nearest_food: nearest_food.as_ref().map(|x| x.brain_input.clone()),
+                nearest_bug: nearest_bug.as_ref().map(|x| x.brain_input.clone()),
             };
 
             let VerboseOutput {
@@ -573,7 +573,7 @@ impl<T> Bug<T> {
             }
 
             if let Some(nearest_food) = nearest_food {
-                if nearest_food.dst
+                if nearest_food.brain_input.dst
                     < EAT_FOOD_MAX_PROXIMITY * self.size() + nearest_food.food.radius()
                 {
                     let eat_rate = noneg_float(0.1) * self.size;

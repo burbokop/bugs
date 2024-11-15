@@ -1,5 +1,5 @@
 use crate::{
-    math::{self, Angle, DeltaAngle, NoNeg},
+    math::{self, fit_into_range, map_into_range, noneg_float, Angle, DeltaAngle, NoNeg},
     range::Range,
     utils::{Color, Float, RequiredToBeInRange as _},
 };
@@ -35,9 +35,35 @@ fn activation_to_noneg_delta_angle(a: Float) -> DeltaAngle<NoNeg<Float>> {
     )
 }
 
+fn relative_radius_to_activation(relative_radius: NoNeg<Float>) -> Float {
+    (fit_into_range(
+        relative_radius.unwrap(),
+        MIN_RELATIVE_RADIUS.unwrap()..MAX_RELATIVE_RADIUS.unwrap(),
+        0. ..1.,
+    ))
+    .unwrap()
+}
+const MAX_RELATIVE_RADIUS: NoNeg<Float> = noneg_float(64.);
+const MIN_RELATIVE_RADIUS: NoNeg<Float> = noneg_float(0.);
+
 #[derive(Clone)]
 pub struct Brain {
     net: Net<Float>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FoodInfo {
+    pub dst: NoNeg<Float>,
+    pub direction: Angle<Float>,
+    pub relative_radius: NoNeg<Float>,
+}
+
+#[derive(Debug, Clone)]
+pub struct BugInfo {
+    pub dst: NoNeg<Float>,
+    pub direction: Angle<Float>,
+    pub color: Color,
+    pub relative_radius: NoNeg<Float>,
 }
 
 #[derive(Debug, Clone)]
@@ -45,16 +71,12 @@ pub struct Input {
     pub energy_level: NoNeg<Float>,
     pub energy_capacity: NoNeg<Float>,
     pub rotation: Angle<Float>,
-    pub proximity_to_food: Option<NoNeg<Float>>,
-    pub direction_to_nearest_food: Option<Angle<Float>>,
-    pub size_of_nearest_food: Option<NoNeg<Float>>,
     pub age: NoNeg<Float>,
-    pub proximity_to_bug: Option<NoNeg<Float>>,
-    pub direction_to_nearest_bug: Option<Angle<Float>>,
-    pub color_of_nearest_bug: Option<Color>,
     pub baby_charge_level: NoNeg<Float>,
     pub baby_charge_capacity: NoNeg<Float>,
     pub vision_range: NoNeg<Float>,
+    pub nearest_food: Option<FoodInfo>,
+    pub nearest_bug: Option<BugInfo>,
 }
 
 #[derive(Debug, Clone)]
@@ -79,48 +101,39 @@ impl From<Input> for [Float; 16] {
         [
             (value.energy_level / value.energy_capacity).unwrap(),
             value
-                .proximity_to_food
-                .map(|x| (x / value.vision_range).unwrap())
+                .nearest_food
+                .as_ref()
+                .map(|x| (x.dst / value.vision_range).unwrap())
                 .unwrap_or(1.),
             value
-                .direction_to_nearest_food
-                .map(|d| delta_angle_to_activation(d.signed_distance(value.rotation)))
+                .nearest_food
+                .as_ref()
+                .map(|d| delta_angle_to_activation(d.direction.signed_distance(value.rotation)))
                 .unwrap_or(0.),
             value
-                .size_of_nearest_food
-                .map(|x| x.unwrap() / 32.)
+                .nearest_food
+                .map(|x| relative_radius_to_activation(x.relative_radius))
                 .unwrap_or(1.),
             value.age.unwrap(),
             value
-                .proximity_to_bug
-                .map(|p| (p / value.vision_range).unwrap())
+                .nearest_bug
+                .as_ref()
+                .map(|p| (p.dst / value.vision_range).unwrap())
                 .unwrap_or(1.),
             value
-                .direction_to_nearest_bug
-                .map(|d| delta_angle_to_activation(d.signed_distance(value.rotation)))
-                .unwrap_or(0.),
-            value
-                .color_of_nearest_bug
+                .nearest_bug
                 .as_ref()
-                .map(|x| x.a)
+                .map(|d| delta_angle_to_activation(d.direction.signed_distance(value.rotation)))
                 .unwrap_or(0.),
+            value.nearest_bug.as_ref().map(|x| x.color.a).unwrap_or(0.),
+            value.nearest_bug.as_ref().map(|x| x.color.r).unwrap_or(0.),
+            value.nearest_bug.as_ref().map(|x| x.color.g).unwrap_or(0.),
+            value.nearest_bug.as_ref().map(|x| x.color.b).unwrap_or(0.),
             value
-                .color_of_nearest_bug
-                .as_ref()
-                .map(|x| x.r)
-                .unwrap_or(0.),
-            value
-                .color_of_nearest_bug
-                .as_ref()
-                .map(|x| x.g)
-                .unwrap_or(0.),
-            value
-                .color_of_nearest_bug
-                .as_ref()
-                .map(|x| x.b)
-                .unwrap_or(0.),
+                .nearest_bug
+                .map(|x| relative_radius_to_activation(x.relative_radius))
+                .unwrap_or(1.),
             value.baby_charge_level.unwrap() / value.baby_charge_capacity.unwrap(),
-            0.,
             0.,
             0.,
             0.,
