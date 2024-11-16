@@ -1,5 +1,7 @@
 use core::f32;
 
+use crate::range::{Range, RangeInclusive};
+
 use super::Angle;
 
 pub trait Sqr {
@@ -165,6 +167,29 @@ impl Floor for f64 {
 
     fn floor(self) -> Self::Output {
         f64::floor(self)
+    }
+}
+
+pub(crate) trait Clamp: Sized {
+    type Output;
+    fn clamp<R: Into<RangeInclusive<Self>>>(self, range: R) -> Self::Output;
+}
+
+impl Clamp for f32 {
+    type Output = f32;
+
+    fn clamp<R: Into<RangeInclusive<Self>>>(self, range: R) -> Self::Output {
+        let range: RangeInclusive<Self> = range.into();
+        f32::clamp(self, range.start, range.end)
+    }
+}
+
+impl Clamp for f64 {
+    type Output = f64;
+
+    fn clamp<R: Into<RangeInclusive<Self>>>(self, range: R) -> Self::Output {
+        let range: RangeInclusive<Self> = range.into();
+        f64::clamp(self, range.start, range.end)
     }
 }
 

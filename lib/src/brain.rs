@@ -1,5 +1,5 @@
 use crate::{
-    math::{self, fit_into_range, noneg_float, Angle, DeltaAngle, NoNeg},
+    math::{self, clamp_into_range, fit_into_range, noneg_float, Angle, DeltaAngle, NoNeg},
     range::Range,
     utils::{Color, Float, RequiredToBeInRange as _},
 };
@@ -35,13 +35,13 @@ fn activation_to_noneg_delta_angle(a: Float) -> DeltaAngle<NoNeg<Float>> {
 }
 
 fn relative_radius_to_activation(relative_radius: NoNeg<Float>) -> Float {
-    (fit_into_range(
+    clamp_into_range(
         relative_radius.unwrap(),
-        MIN_RELATIVE_RADIUS.unwrap()..MAX_RELATIVE_RADIUS.unwrap(),
-        0. ..1.,
-    ))
-    .unwrap()
+        MIN_RELATIVE_RADIUS.unwrap()..=MAX_RELATIVE_RADIUS.unwrap(),
+        0. ..=1.,
+    )
 }
+
 const MAX_RELATIVE_RADIUS: NoNeg<Float> = noneg_float(64.);
 const MIN_RELATIVE_RADIUS: NoNeg<Float> = noneg_float(0.);
 

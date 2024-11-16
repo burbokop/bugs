@@ -6,7 +6,14 @@ use std::{
 };
 
 use crate::{
-    bug::Bug, chromo_utils::ExtendedChromosome as _, chunk::{ChunkedVec, Position, RawChunkIndex}, food_source::{FoodSource, FoodSourceShape}, math::{noneg_float, Angle, DeltaAngle, NoNeg, Point, Rect, Size}, range::Range, time_point::TimePoint, utils::Float
+    bug::Bug,
+    chromo_utils::ExtendedChromosome as _,
+    chunk::{ChunkedVec, Position, RawChunkIndex},
+    food_source::{FoodSource, FoodSourceShape},
+    math::{noneg_float, Angle, DeltaAngle, NoNeg, Point, Rect, Size},
+    range::Range,
+    time_point::TimePoint,
+    utils::Float,
 };
 use chromosome::Chromosome;
 use rand::{distributions::uniform::SampleRange, RngCore};
