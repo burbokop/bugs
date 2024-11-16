@@ -1,5 +1,5 @@
 use crate::{
-    math::{self, clamp_into_range, fit_into_range, noneg_float, Angle, DeltaAngle, NoNeg},
+    math::{self, clamp_into_range, noneg_float, Angle, DeltaAngle, NoNeg},
     range::Range,
     utils::{Color, Float, RequiredToBeInRange as _},
 };

@@ -1,3 +1,5 @@
+#![deny(unused_imports)]
+
 pub mod brain;
 pub mod bug;
 pub mod chromo_utils;

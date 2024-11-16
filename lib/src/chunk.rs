@@ -18,6 +18,27 @@ impl<T> Default for Chunk<T> {
     }
 }
 
+impl<T> Chunk<T> {
+    fn index_of_impl<P>(&self, predicate: &mut P) -> Option<usize>
+    where
+        P: FnMut(&T) -> bool,
+    {
+        for i in 0..self.items.len() {
+            if predicate(&self.items[i]) {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    pub(crate) fn index_of<P>(&self, mut predicate: P) -> Option<usize>
+    where
+        P: FnMut(&T) -> bool,
+    {
+        self.index_of_impl(&mut predicate)
+    }
+}
+
 pub(crate) trait Position {
     fn position(&self) -> Point<Float>;
 }
@@ -166,7 +187,7 @@ impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
         self.len += 1;
     }
 
-    pub(crate) fn position<P>(&self, mut predicate: P) -> Option<Index>
+    pub(crate) fn index_of<P>(&self, mut predicate: P) -> Option<Index>
     where
         P: FnMut(&T) -> bool,
     {
@@ -192,6 +213,27 @@ impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
             }
         }
         None
+    }
+
+    /// gives index of element which satisfy predicate. but search area is limited to certain range
+    pub(crate) fn index_of_in_range<P>(
+        &self,
+        mut predicate: P,
+        position: Point<Float>,
+        range: NoNeg<Float>,
+    ) -> Option<Index>
+    where
+        P: FnMut(&T) -> bool,
+    {
+        self.circular_traverse_iter(position, range)
+            .find_map(|chunk_index| {
+                self.get_chunk(chunk_index.clone()).and_then(|chunk| {
+                    chunk.index_of_impl(&mut predicate).map(|item_index| Index {
+                        chunk_index,
+                        item_index,
+                    })
+                })
+            })
     }
 
     pub(crate) fn remove(&mut self, index: Index) -> T {
@@ -230,8 +272,8 @@ impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
         T: Position,
     {
         self.circular_traverse_iter(position, range).find_map(
-            |index| -> Option<(&T, NoNeg<Float>)> {
-                if let Some(chunk) = self.get_chunk(index) {
+            |chunk_index| -> Option<(&T, NoNeg<Float>)> {
+                self.get_chunk(chunk_index).and_then(|chunk| {
                     chunk
                         .items
                         .iter()
@@ -244,9 +286,7 @@ impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
                             }
                         })
                         .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
-                } else {
-                    None
-                }
+                })
             },
         )
     }
@@ -262,8 +302,8 @@ impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
         F: FnMut(&'a T) -> Option<B> + Clone,
     {
         self.circular_traverse_iter(position, range).find_map(
-            |index| -> Option<(B, NoNeg<Float>)> {
-                if let Some(chunk) = self.get_chunk(index) {
+            |chunk_index| -> Option<(B, NoNeg<Float>)> {
+                self.get_chunk(chunk_index).and_then(|chunk| {
                     chunk
                         .items
                         .iter()
@@ -277,9 +317,7 @@ impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
                             }
                         })
                         .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
-                } else {
-                    None
-                }
+                })
             },
         )
     }

@@ -1,6 +1,6 @@
 use core::f32;
 
-use crate::range::{Range, RangeInclusive};
+use crate::range::RangeInclusive;
 
 use super::Angle;
 
