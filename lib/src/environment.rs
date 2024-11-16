@@ -1,7 +1,8 @@
 use std::{
-    cell::{Ref, RefCell},
+    cell::{Ref, RefCell, RefMut},
     f64::consts::PI,
     ops::Deref,
+    rc::Rc,
     time::Duration,
 };
 
@@ -10,7 +11,7 @@ use crate::{
     chromo_utils::ExtendedChromosome as _,
     chunk::{ChunkedVec, Position, RawChunkIndex},
     food_source::{FoodSource, FoodSourceShape},
-    math::{noneg_float, Angle, DeltaAngle, NoNeg, Point, Rect, Size},
+    math::{noneg_float, Angle, DeltaAngle, NoNeg, Point},
     range::Range,
     time_point::TimePoint,
     utils::Float,
@@ -215,7 +216,6 @@ pub(crate) enum EnvironmentRequest {
     },
     TransferEnergyFromFoodToBug {
         food_id: usize,
-        bug_id: usize,
         delta_energy: NoNeg<Float>,
     },
     PlaceFood(FoodCreateInfo),
@@ -224,8 +224,8 @@ pub(crate) enum EnvironmentRequest {
 #[derive(Serialize, Deserialize)]
 pub struct Environment<T> {
     food: ChunkedVec<Food, 256, 256>,
-    food_sources: Vec<FoodSource<T>>,
-    bugs: ChunkedVec<RefCell<Bug<T>>, 256, 256>,
+    food_sources: Vec<Rc<RefCell<FoodSource<T>>>>,
+    bugs: ChunkedVec<Rc<RefCell<Bug<T>>>, 256, 256>,
     creation_time: T,
     now: T,
     next_food_id: usize,
@@ -254,18 +254,18 @@ impl<T> Environment<T> {
             .collect();
         let food_sources = food_sources
             .into_iter()
-            .map(|create_info| create_info.create(now.clone()))
+            .map(|create_info| Rc::new(RefCell::new(create_info.create(now.clone()))))
             .collect();
         let bugs = bugs
             .into_iter()
             .map(|create_info| {
-                RefCell::new(Bug::give_birth_with_max_energy(
+                Rc::new(RefCell::new(Bug::give_birth_with_max_energy(
                     &mut next_bug_id,
                     create_info.chromosome,
                     create_info.position,
                     create_info.rotation,
                     now.clone(),
-                ))
+                )))
             })
             .collect();
 
@@ -308,9 +308,9 @@ impl<T> Environment<T> {
         );
         let food_sources = food_sources
             .into_iter()
-            .map(|x| x.create(now.clone()))
+            .map(|x| Rc::new(RefCell::new(x.create(now.clone()))))
             .collect();
-        let bugs = vec![RefCell::new(
+        let bugs = vec![Rc::new(RefCell::new(
             Bug::give_birth(
                 &mut next_bug_id,
                 Chromosome {
@@ -338,7 +338,7 @@ impl<T> Environment<T> {
                 now.clone(),
             )
             .unwrap(),
-        )];
+        ))];
 
         Self {
             food: food.into_iter().collect(),
@@ -370,48 +370,69 @@ impl<T> Environment<T> {
     {
         self.now += dt;
 
-        let mut requests: Vec<EnvironmentRequest> = Default::default();
+        enum Requester<T> {
+            FoodSource(Rc<RefCell<FoodSource<T>>>),
+            Bug(Rc<RefCell<Bug<T>>>),
+        }
+
+        impl<T> Requester<T> {
+            fn bug_ref<'a>(&'a self) -> Option<RefMut<'a, Bug<T>>> {
+                match self {
+                    Requester::FoodSource(_) => None,
+                    Requester::Bug(rc) => Some(rc.borrow_mut()),
+                }
+            }
+        }
+
+        let mut requests: Vec<(Requester<T>, Vec<EnvironmentRequest>)> = Default::default();
         {
             let now = self.now().clone();
             for food_source in &mut self.food_sources {
-                requests.append(&mut food_source.proceed(&now, rng));
+                let r = food_source.as_ref().borrow_mut().proceed(&now, rng);
+                requests.push((Requester::FoodSource(food_source.clone()), r));
             }
         }
 
         for b in self.bugs.iter() {
-            requests.append(&mut b.borrow_mut().proceed(&self, dt, rng));
+            let r = b.as_ref().borrow_mut().proceed(&self, dt, rng);
+            requests.push((Requester::Bug(b.clone()), r));
         }
 
         self.bugs.shuffle();
 
-        for request in requests {
-            match request {
-                EnvironmentRequest::Kill { id } => self.kill(id),
-                EnvironmentRequest::GiveBirth {
-                    chromosome,
-                    position,
-                    rotation,
-                    energy_level,
-                } => {
-                    for bug in Bug::give_birth_to_twins(
-                        &mut self.next_bug_id,
+        for (requester, requests) in requests {
+            for request in requests {
+                match request {
+                    EnvironmentRequest::Kill { id } => self.kill(id),
+                    EnvironmentRequest::GiveBirth {
                         chromosome,
                         position,
                         rotation,
                         energy_level,
-                        self.now.clone(),
-                    ) {
-                        self.bugs.push(RefCell::new(bug));
+                    } => {
+                        for bug in Bug::give_birth_to_twins(
+                            &mut self.next_bug_id,
+                            chromosome,
+                            position,
+                            rotation,
+                            energy_level,
+                            self.now.clone(),
+                        ) {
+                            self.bugs.push(Rc::new(RefCell::new(bug)));
+                        }
                     }
+                    EnvironmentRequest::TransferEnergyFromFoodToBug {
+                        food_id,
+                        delta_energy,
+                    } => self.transfer_energy_from_food_to_bug(
+                        food_id,
+                        &mut requester.bug_ref().unwrap(),
+                        delta_energy,
+                    ),
+                    EnvironmentRequest::PlaceFood(food_create_info) => self
+                        .food
+                        .push(food_create_info.create(&mut self.next_food_id)),
                 }
-                EnvironmentRequest::TransferEnergyFromFoodToBug {
-                    food_id,
-                    bug_id,
-                    delta_energy,
-                } => self.transfer_energy_from_food_to_bug(food_id, bug_id, delta_energy),
-                EnvironmentRequest::PlaceFood(food_create_info) => self
-                    .food
-                    .push(food_create_info.create(&mut self.next_food_id)),
             }
         }
 
@@ -431,17 +452,15 @@ impl<T> Environment<T> {
     fn transfer_energy_from_food_to_bug(
         &mut self,
         food_id: usize,
-        bug_id: usize,
+        bug: &mut Bug<T>,
         delta_energy: NoNeg<Float>,
     ) {
-        if let Some(bug) = self.bugs.iter().find(|b| (*b).borrow().id() == bug_id) {
-            if let Some(food_index) = self.food.position(|b| b.id() == food_id) {
-                if bug
-                    .borrow_mut()
-                    .eat(&mut self.food[food_index.clone()], delta_energy)
-                {
-                    self.food.remove(food_index);
-                }
+        if let Some(food_index) =
+            self.food
+                .index_of_in_range(|b| b.id() == food_id, bug.position(), bug.eat_range())
+        {
+            if bug.eat(&mut self.food[food_index.clone()], delta_energy) {
+                self.food.remove(food_index);
             }
         }
     }
@@ -504,8 +523,8 @@ impl<T> Environment<T> {
         })
     }
 
-    pub fn food_sources(&self) -> &[FoodSource<T>] {
-        &self.food_sources
+    pub fn food_sources<'a>(&'a self) -> impl Iterator<Item = Ref<'a, FoodSource<T>>> {
+        self.food_sources.iter().map(|x| x.as_ref().borrow())
     }
 
     pub fn bugs_count(&self) -> usize {
@@ -543,41 +562,42 @@ impl<T> Environment<T> {
     where
         T: Clone,
     {
-        self.bugs.push(RefCell::new(Bug::give_birth_with_max_energy(
-            &mut self.next_bug_id,
-            Chromosome {
-                genes: (0..256)
-                    .map(|i| {
-                        if i == 0 {
-                            2.
-                        } else if i == 128 {
-                            0.
-                        } else if i == 18 {
-                            2.
-                        } else if i == 137 {
-                            2.
-                        } else if i == 33 {
-                            2.
-                        } else if i == 146 {
-                            -2.
-                        } else if i == 202 {
-                            1.
-                        } else if i == 130 {
-                            2.
-                        } else if i == 128 + 8 + 8 + 8 {
-                            2. // baby charge
-                        } else if (0..208).contains(&i) {
-                            0.
-                        } else {
-                            1.
-                        }
-                    })
-                    .collect(),
-            },
-            center,
-            Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
-            self.now.clone(),
-        )));
+        self.bugs
+            .push(Rc::new(RefCell::new(Bug::give_birth_with_max_energy(
+                &mut self.next_bug_id,
+                Chromosome {
+                    genes: (0..256)
+                        .map(|i| {
+                            if i == 0 {
+                                2.
+                            } else if i == 128 {
+                                0.
+                            } else if i == 18 {
+                                2.
+                            } else if i == 137 {
+                                2.
+                            } else if i == 33 {
+                                2.
+                            } else if i == 146 {
+                                -2.
+                            } else if i == 202 {
+                                1.
+                            } else if i == 130 {
+                                2.
+                            } else if i == 128 + 8 + 8 + 8 {
+                                2. // baby charge
+                            } else if (0..208).contains(&i) {
+                                0.
+                            } else {
+                                1.
+                            }
+                        })
+                        .collect(),
+                },
+                center,
+                Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
+                self.now.clone(),
+            ))));
     }
 
     pub fn food_chunks(&self) -> Vec<(RawChunkIndex, usize)> {
@@ -686,5 +706,26 @@ impl<T> Deref for SeededEnvironment<T> {
 
     fn deref(&self) -> &Self::Target {
         &self.env
+    }
+}
+
+pub mod benchmark_internals {
+    use std::{cell::RefCell, rc::Rc};
+
+    use crate::{bug::Bug, math::NoNeg, utils::Float};
+
+    use super::Environment;
+
+    pub fn transfer_energy_from_food_to_bug<T>(
+        env: &mut Environment<T>,
+        food_id: usize,
+        bug: &mut Bug<T>,
+        delta_energy: NoNeg<Float>,
+    ) {
+        env.transfer_energy_from_food_to_bug(food_id, bug, delta_energy)
+    }
+
+    pub fn find_bug_by_id<T>(env: &Environment<T>, id: usize) -> Option<Rc<RefCell<Bug<T>>>> {
+        env.bugs.iter().find(|b| b.borrow().id() == id).cloned()
     }
 }

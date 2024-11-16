@@ -5,8 +5,8 @@ use std::{
 };
 
 use bugs_lib::{
-    environment::{BugCreateInfo, Environment, FoodCreateInfo},
-    math::Angle,
+    environment::{benchmark_internals, BugCreateInfo, Environment, FoodCreateInfo},
+    math::{noneg_float, Angle},
     time_point::TimePoint,
 };
 use chromosome::Chromosome;
@@ -170,7 +170,108 @@ fn find_nearest_bug(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, find_nearest_food, find_nearest_bug,);
+fn transfer_energy_from_food_to_bug(c: &mut Criterion) {
+    let mut rng: Pcg64 = Seeder::from(&[0xff]).make_rng();
+    let the_beginning_of_times = FakeTime::default();
+
+    {
+        let mut environment = Environment::new(
+            the_beginning_of_times.clone(),
+            FoodCreateInfo::generate_vec(&mut rng, -50. ..50., -50. ..50., 0. ..1., 1024),
+            vec![],
+            BugCreateInfo::generate_vec(
+                &mut rng,
+                1. ..1.01,
+                -50. ..50.,
+                -50. ..50.,
+                0. ..(PI * 2.),
+                1024,
+            ),
+        );
+
+        let bug = benchmark_internals::find_bug_by_id(&mut environment, 512).unwrap();
+
+        c.bench_function("transfer_energy_from_food_to_bug (small)", |b| {
+            b.iter(|| {
+                black_box(benchmark_internals::transfer_energy_from_food_to_bug(
+                    &mut environment,
+                    512,
+                    &mut bug.borrow_mut(),
+                    noneg_float(0.00001),
+                ))
+            })
+        });
+    }
+    {
+        let mut environment = Environment::new(
+            the_beginning_of_times.clone(),
+            FoodCreateInfo::generate_vec(&mut rng, -50. ..50., -50. ..50., 0. ..1., 16384),
+            vec![],
+            BugCreateInfo::generate_vec(
+                &mut rng,
+                1. ..1.01,
+                -50. ..50.,
+                -50. ..50.,
+                0. ..(PI * 2.),
+                16384,
+            ),
+        );
+
+        let bug = benchmark_internals::find_bug_by_id(&mut environment, 512).unwrap();
+
+        c.bench_function("transfer_energy_from_food_to_bug (big)", |b| {
+            b.iter(|| {
+                black_box(benchmark_internals::transfer_energy_from_food_to_bug(
+                    &mut environment,
+                    8192,
+                    &mut bug.borrow_mut(),
+                    noneg_float(0.00001),
+                ))
+            })
+        });
+    }
+    {
+        let mut environment = Environment::new(
+            the_beginning_of_times.clone(),
+            FoodCreateInfo::generate_vec(
+                &mut rng,
+                -10000. ..10000.,
+                -10000. ..10000.,
+                0. ..1.,
+                16384,
+            ),
+            vec![],
+            BugCreateInfo::generate_vec(
+                &mut rng,
+                1. ..1.01,
+                -10000. ..10000.,
+                -10000. ..10000.,
+                0. ..(PI * 2.),
+                16384,
+            ),
+        );
+
+        let bug = benchmark_internals::find_bug_by_id(&mut environment, 512).unwrap();
+
+        c.bench_function("transfer_energy_from_food_to_bug (big, far)", |b| {
+            b.iter(|| {
+                black_box(benchmark_internals::transfer_energy_from_food_to_bug(
+                    &mut environment,
+                    8192,
+                    &mut bug.borrow_mut(),
+                    noneg_float(0.00001),
+                ))
+            })
+        });
+    }
+}
+
+criterion_group!(
+    benches,
+    find_nearest_food,
+    find_nearest_bug,
+    transfer_energy_from_food_to_bug,
+);
 criterion_main!(benches);
 
 // #1

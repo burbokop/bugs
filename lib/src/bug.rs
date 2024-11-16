@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::rc::Rc;
 use std::{cell::Ref, error::Error, f64::consts::PI, fmt::Display, time::Duration};
 
 use chromosome::Chromosome;
@@ -88,6 +89,12 @@ impl<T> Position for RefCell<Bug<T>> {
 impl<'a, T> Position for Ref<'a, Bug<T>> {
     fn position(&self) -> Point<Float> {
         self.position
+    }
+}
+
+impl<T> Position for Rc<RefCell<Bug<T>>> {
+    fn position(&self) -> Point<Float> {
+        self.borrow().position
     }
 }
 
@@ -600,7 +607,6 @@ impl<T> Bug<T> {
                     let eat_rate = noneg_float(0.1) * self.size;
                     requests.push(EnvironmentRequest::TransferEnergyFromFoodToBug {
                         food_id: nearest_food.food.id(),
-                        bug_id: self.id,
                         delta_energy: NoNeg::wrap(dt.as_secs_f64()).unwrap() * eat_rate,
                     });
                 }
