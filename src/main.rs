@@ -1,5 +1,8 @@
+#![deny(unused_imports)]
+
 use app_utils::color_to_slint_rgba_color;
-use bugs_lib::environment::{FoodSourceCreateInfo, SeededEnvironment};
+use bugs_lib::env_presets;
+use bugs_lib::environment::SeededEnvironment;
 use bugs_lib::math::{noneg_float, Angle, NoNeg, Point};
 use bugs_lib::time_point::{StaticTimePoint, TimePoint as _};
 use bugs_lib::utils::{pretty_duration, Color, Float};
@@ -69,18 +72,65 @@ struct State {
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
-struct Args {
+enum Args {
+    New(NewCommand),
+    Load(LoadCommand),
+}
+
+#[derive(clap::ValueEnum, Clone, Debug, PartialEq)]
+#[clap(rename_all = "kebab_case")]
+enum EnvPreset {
+    NestedRects,
+    Circle,
+}
+
+/// Generates simulation environment from one of builtin presets
+#[derive(Parser)]
+struct NewCommand {
+    #[arg(short, long)]
+    env_preset: EnvPreset,
+}
+
+/// Loads simulation environment from json save file
+#[derive(Parser)]
+struct LoadCommand {
     #[arg(short, long)]
     save_file: Option<PathBuf>,
 }
 
 pub fn main() -> Result<(), PlatformError> {
-    let args = Args::parse();
-    let save_path = args.save_file.unwrap_or_else(|| {
-        let exe_path = std::env::current_exe().unwrap();
-        let exe_dir = exe_path.parent().unwrap();
-        exe_dir.join("save.json")
-    });
+    let (save_path, environment) = match Args::parse() {
+        Args::New(command) => {
+            let exe_path = std::env::current_exe().unwrap();
+            let exe_dir = exe_path.parent().unwrap();
+            let save_path = exe_dir.join("save.json");
+
+            (
+                save_path,
+                match command.env_preset {
+                    EnvPreset::NestedRects => env_presets::less_food_further_from_center(
+                        StaticTimePoint::default(),
+                        rand::thread_rng().gen(),
+                    ),
+                    EnvPreset::Circle => env_presets::one_big_circle(
+                        StaticTimePoint::default(),
+                        rand::thread_rng().gen(),
+                    ),
+                },
+            )
+        }
+        Args::Load(command) => {
+            let save_path = command.save_file.unwrap_or_else(|| {
+                let exe_path = std::env::current_exe().unwrap();
+                let exe_dir = exe_path.parent().unwrap();
+                exe_dir.join("save.json")
+            });
+            (
+                save_path.clone(),
+                serde_json::from_str(&std::fs::read_to_string(&save_path).unwrap()).unwrap(),
+            )
+        }
+    };
 
     println!(
         "save_path: {:?}, (exist: {})",
@@ -89,58 +139,7 @@ pub fn main() -> Result<(), PlatformError> {
     );
 
     let state = Rc::new(RefCell::new(State {
-        environment: if save_path.exists() {
-            serde_json::from_str(&std::fs::read_to_string(&save_path).unwrap()).unwrap()
-        } else {
-            SeededEnvironment::generate(
-                StaticTimePoint::default(),
-                rand::thread_rng().gen(),
-                // max energy increases by 2^x, and spawn interval increases by 3^x
-                vec![
-                    FoodSourceCreateInfo {
-                        position: (0., 0.).into(),
-                        size: (1000., 1000.).into(),
-                        energy_range: (0. ..1.).into(),
-                        spawn_interval: Duration::from_millis((4_u64).pow(0) * 1000),
-                    },
-                    FoodSourceCreateInfo {
-                        position: (0., 0.).into(),
-                        size: (2000., 2000.).into(),
-                        energy_range: (0. ..2.).into(),
-                        spawn_interval: Duration::from_millis((4_u64).pow(1) * 1000),
-                    },
-                    FoodSourceCreateInfo {
-                        position: (0., 0.).into(),
-                        size: (4000., 4000.).into(),
-                        energy_range: (0. ..4.).into(),
-                        spawn_interval: Duration::from_millis((4_u64).pow(2) * 1000),
-                    },
-                    FoodSourceCreateInfo {
-                        position: (0., 0.).into(),
-                        size: (16000., 16000.).into(),
-                        energy_range: (0. ..8.).into(),
-                        spawn_interval: Duration::from_millis((4_u64).pow(3) * 1000),
-                    },
-                    FoodSourceCreateInfo {
-                        position: (0., 0.).into(),
-                        size: (32000., 32000.).into(),
-                        energy_range: (0. ..16.).into(),
-                        spawn_interval: Duration::from_millis((4_u64).pow(4) * 1000),
-                    },
-                    FoodSourceCreateInfo {
-                        position: (0., 0.).into(),
-                        size: (64000., 64000.).into(),
-                        energy_range: (0. ..32.).into(),
-                        spawn_interval: Duration::from_millis((4_u64).pow(5) * 1000),
-                    },
-                ],
-                -1000. ..1000.,
-                -1000. ..1000.,
-                0. ..1.,
-                32768,
-                (0., 0.).into(),
-            )
-        },
+        environment,
         selected_bug_id: None,
         camera: Default::default(),
         environment_render_model: Default::default(),

@@ -1,4 +1,4 @@
-use super::{Angle, Cos, Sin};
+use super::{Angle, Cos, Point, Sin};
 use std::ops::{Add, Mul};
 
 #[derive(Debug, Clone, Copy)]
@@ -37,6 +37,10 @@ impl<T> Complex<T> {
 
     pub fn imag(&self) -> &T {
         &self.imag
+    }
+
+    pub fn into_cartesian(self) -> Point<T> {
+        (self.real, self.imag).into()
     }
 }
 
