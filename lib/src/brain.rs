@@ -1,10 +1,9 @@
 use crate::{
-    math::{self, fit_into_range, map_into_range, noneg_float, Angle, DeltaAngle, NoNeg},
+    math::{self, fit_into_range, noneg_float, Angle, DeltaAngle, NoNeg},
     range::Range,
     utils::{Color, Float, RequiredToBeInRange as _},
 };
 use chromosome::Chromosome;
-use serde::Serialize;
 use simple_neural_net::{normalizers, Arr, Layer as _, PerceptronLayer};
 use std::f64::consts::PI;
 

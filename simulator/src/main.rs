@@ -1,6 +1,5 @@
-mod env_presets;
-
 use bugs_lib::{
+    env_presets,
     environment::SeededEnvironment,
     time_point::{StaticTimePoint, TimePoint as _},
     utils::{pretty_duration, Float},

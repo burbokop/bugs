@@ -1,5 +1,4 @@
 use std::{
-    borrow::Borrow,
     cell::{Ref, RefCell},
     f64::consts::PI,
     ops::Deref,
@@ -7,13 +6,7 @@ use std::{
 };
 
 use crate::{
-    bug::Bug,
-    chromo_utils::ExtendedChromosome as _,
-    chunk::{ChunkedVec, Position, RawChunkIndex},
-    math::{noneg_float, Angle, DeltaAngle, NoNeg, Point, Rect, Size},
-    range::Range,
-    time_point::TimePoint,
-    utils::{sample_range_from_range, Float},
+    bug::Bug, chromo_utils::ExtendedChromosome as _, chunk::{ChunkedVec, Position, RawChunkIndex}, food_source::{FoodSource, FoodSourceShape}, math::{noneg_float, Angle, DeltaAngle, NoNeg, Point, Rect, Size}, range::Range, time_point::TimePoint, utils::Float
 };
 use chromosome::Chromosome;
 use rand::{distributions::uniform::SampleRange, RngCore};
@@ -26,45 +19,6 @@ pub struct Food {
     id: usize,
     position: Point<Float>,
     energy: NoNeg<Float>,
-}
-
-/// Generates food around itself over time
-#[derive(Debug, Serialize, Deserialize)]
-pub struct FoodSource<T> {
-    position: Point<Float>,
-    size: Size<Float>,
-    energy_range: Range<Float>,
-    spawn_interval: Duration,
-    last_food_creation_instant: T,
-}
-
-pub struct FoodSourceCreateInfo {
-    pub position: Point<Float>,
-    pub size: Size<Float>,
-    pub energy_range: Range<Float>,
-    pub spawn_interval: Duration,
-}
-
-impl FoodSourceCreateInfo {
-    fn create<T>(self, last_food_creation_instant: T) -> FoodSource<T> {
-        FoodSource {
-            position: self.position,
-            size: self.size,
-            energy_range: self.energy_range,
-            spawn_interval: self.spawn_interval,
-            last_food_creation_instant,
-        }
-    }
-}
-
-impl<T> FoodSource<T> {
-    pub fn position(&self) -> Point<Float> {
-        self.position
-    }
-
-    pub fn size(&self) -> Size<Float> {
-        self.size
-    }
 }
 
 impl Food {
@@ -174,6 +128,10 @@ impl FoodCreateInfo {
             .map(|_| Self::generate(rng, x_range.clone(), y_range.clone(), e_range.clone()))
             .collect()
     }
+
+    pub(crate) fn create(self, next_id: &mut usize) -> Food {
+        Food::new(next_id, self.position, self.energy)
+    }
 }
 
 pub struct BugCreateInfo {
@@ -219,6 +177,25 @@ impl BugCreateInfo {
     }
 }
 
+pub struct FoodSourceCreateInfo {
+    pub position: Point<Float>,
+    pub shape: FoodSourceShape,
+    pub energy_range: Range<Float>,
+    pub spawn_interval: Duration,
+}
+
+impl FoodSourceCreateInfo {
+    pub(crate) fn create<T>(self, last_food_creation_instant: T) -> FoodSource<T> {
+        FoodSource::new(
+            self.position,
+            self.shape,
+            self.energy_range,
+            self.spawn_interval,
+            last_food_creation_instant,
+        )
+    }
+}
+
 pub(crate) enum EnvironmentRequest {
     Kill {
         id: usize,
@@ -234,6 +211,7 @@ pub(crate) enum EnvironmentRequest {
         bug_id: usize,
         delta_energy: NoNeg<Float>,
     },
+    PlaceFood(FoodCreateInfo),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -385,27 +363,14 @@ impl<T> Environment<T> {
     {
         self.now += dt;
 
-        for food_source in &mut self.food_sources {
-            let n = self
-                .now
-                .duration_since(&food_source.last_food_creation_instant)
-                .div_duration_f64(food_source.spawn_interval)
-                .floor();
-
-            for _ in 0..(n as usize) {
-                let rect = Rect::from_center(food_source.position, food_source.size);
-                self.food.push(Food::generate(
-                    &mut self.next_food_id,
-                    rng,
-                    sample_range_from_range(rect.x_range()),
-                    sample_range_from_range(rect.y_range()),
-                    sample_range_from_range(food_source.energy_range),
-                ));
+        let mut requests: Vec<EnvironmentRequest> = Default::default();
+        {
+            let now = self.now().clone();
+            for food_source in &mut self.food_sources {
+                requests.append(&mut food_source.proceed(&now, rng));
             }
-            food_source.last_food_creation_instant += food_source.spawn_interval.mul_f64(n);
         }
 
-        let mut requests: Vec<EnvironmentRequest> = Default::default();
         for b in self.bugs.iter() {
             requests.append(&mut b.borrow_mut().proceed(&self, dt, rng));
         }
@@ -437,6 +402,9 @@ impl<T> Environment<T> {
                     bug_id,
                     delta_energy,
                 } => self.transfer_energy_from_food_to_bug(food_id, bug_id, delta_energy),
+                EnvironmentRequest::PlaceFood(food_create_info) => self
+                    .food
+                    .push(food_create_info.create(&mut self.next_food_id)),
             }
         }
 

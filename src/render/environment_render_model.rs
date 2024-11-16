@@ -4,10 +4,7 @@ use crate::{
     Tool, NUKE_RADIUS,
 };
 use bugs_lib::{
-    environment::Environment,
-    math::{map_into_range, noneg_float, Complex, DeltaAngle, Point, Rect, Size},
-    range::Range,
-    utils::Float,
+    environment::Environment, food_source::FoodSourceShape, math::{map_into_range, noneg_float, Complex, DeltaAngle, Point, Rect, Size}, range::Range, utils::Float
 };
 use font_loader::system_fonts;
 use sdl2::{
@@ -188,19 +185,34 @@ impl EnvironmentRenderModel {
 
             canvas.set_draw_color(Color::RGB(211, 250, 199));
             canvas.clear();
+            let scale = Float::max(*transformation.scale_x(), *transformation.scale_y());
 
             canvas.set_draw_color(Color::RGB(0, 255, 87));
             for source in environment.food_sources() {
                 let position = &transformation * &source.position();
-                let size = &transformation * &source.size();
 
-                canvas
-                    .draw_rect(sdl2::rect::Rect::from_center(
-                        (*position.x() as i32, *position.y() as i32),
-                        *size.w() as u32,
-                        *size.h() as u32,
-                    ))
-                    .unwrap();
+                match source.shape() {
+                    FoodSourceShape::Rect { size } => {
+                        let size = &transformation * size;
+                        canvas
+                            .draw_rect(sdl2::rect::Rect::from_center(
+                                (*position.x() as i32, *position.y() as i32),
+                                *size.w() as u32,
+                                *size.h() as u32,
+                            ))
+                            .unwrap();
+                    }
+                    FoodSourceShape::Circle { radius } => {
+                        canvas
+                            .circle(
+                                *position.x() as i16,
+                                *position.y() as i16,
+                                (radius.unwrap() * scale) as i16,
+                                Color::RGB(0, 255, 87),
+                            )
+                            .unwrap();
+                    }
+                }
             }
 
             let view_port_rect: Rect<_> = (
@@ -229,7 +241,6 @@ impl EnvironmentRenderModel {
                         .unwrap();
                 }
             }
-            let scale = Float::max(*transformation.scale_x(), *transformation.scale_y());
 
             match chunks_display_mode {
                 ChunksDisplayMode::FoodChunks => {
