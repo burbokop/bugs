@@ -8,7 +8,9 @@ use bugs_lib::time_point::{StaticTimePoint, TimePoint as _};
 use bugs_lib::utils::{pretty_duration, Color, Float};
 use clap::Parser;
 use rand::Rng;
-use render::{BrainRenderModel, Camera, ChunksDisplayMode, EnvironmentRenderModel};
+use render::sdl::{SdlBrainRenderModel, SdlEnvironmentRenderModel};
+use render::vulkan::{VulkanBrainRenderModel, VulkanEnvironmentRenderModel};
+use render::{BrainRenderer, Camera, ChunksDisplayMode, EnvironmentRenderer};
 use slint::{CloseRequestResponse, ComponentHandle, PlatformError, Timer, TimerMode};
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -57,8 +59,8 @@ pub const NUKE_RADIUS: NoNeg<Float> = noneg_float(200.);
 struct State {
     environment: SeededEnvironment<StaticTimePoint>,
     camera: Camera,
-    environment_render_model: RefCell<EnvironmentRenderModel>,
-    brain_render_model: RefCell<BrainRenderModel>,
+    environment_render_model: RefCell<EnvironmentRenderer<StaticTimePoint>>,
+    brain_render_model: RefCell<BrainRenderer>,
     selected_bug_id: Option<usize>,
     time_speed: Float,
     pause: bool,
@@ -85,11 +87,20 @@ enum EnvPreset {
     Circle,
 }
 
+#[derive(clap::ValueEnum, Clone, Debug, PartialEq)]
+#[clap(rename_all = "kebab_case")]
+enum Renderer {
+    Sdl,
+    Vulkan,
+}
+
 /// Generates simulation environment from one of builtin presets
 #[derive(Parser)]
 struct NewCommand {
     #[arg(short, long)]
     env_preset: EnvPreset,
+    #[arg(short, long)]
+    renderer: Renderer,
 }
 
 /// Loads simulation environment from json save file
@@ -97,10 +108,12 @@ struct NewCommand {
 struct LoadCommand {
     #[arg(short, long)]
     save_file: Option<PathBuf>,
+    #[arg(short, long, default_value = "sdl")]
+    renderer: Renderer,
 }
 
 pub fn main() -> Result<(), PlatformError> {
-    let (save_path, environment) = match Args::parse() {
+    let (save_path, environment, renderer) = match Args::parse() {
         Args::New(command) => {
             let exe_path = std::env::current_exe().unwrap();
             let exe_dir = exe_path.parent().unwrap();
@@ -118,6 +131,7 @@ pub fn main() -> Result<(), PlatformError> {
                         rand::thread_rng().gen(),
                     ),
                 },
+                command.renderer,
             )
         }
         Args::Load(command) => {
@@ -129,6 +143,7 @@ pub fn main() -> Result<(), PlatformError> {
             (
                 save_path.clone(),
                 serde_json::from_str(&std::fs::read_to_string(&save_path).unwrap()).unwrap(),
+                command.renderer,
             )
         }
     };
@@ -143,8 +158,18 @@ pub fn main() -> Result<(), PlatformError> {
         environment,
         selected_bug_id: None,
         camera: Default::default(),
-        environment_render_model: Default::default(),
-        brain_render_model: Default::default(),
+        environment_render_model: match renderer {
+            Renderer::Sdl => RefCell::new(EnvironmentRenderer::new(
+                SdlEnvironmentRenderModel::default(),
+            )),
+            Renderer::Vulkan => RefCell::new(EnvironmentRenderer::new(
+                VulkanEnvironmentRenderModel::default(),
+            )),
+        },
+        brain_render_model: match renderer {
+            Renderer::Sdl => RefCell::new(BrainRenderer::new(SdlBrainRenderModel::default())),
+            Renderer::Vulkan => RefCell::new(BrainRenderer::new(VulkanBrainRenderModel::default())),
+        },
         time_speed: 1.,
         pause: true,
         selected_node: None,
