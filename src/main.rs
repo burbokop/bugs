@@ -68,6 +68,7 @@ struct State {
     tool_action_point: Option<Point<Float>>,
     tool_action_active: bool,
     chunks_display_mode: ChunksDisplayMode,
+    do_render: bool,
 }
 
 #[derive(Parser)]
@@ -152,6 +153,7 @@ pub fn main() -> Result<(), PlatformError> {
         tool_action_point: None,
         tool_action_active: false,
         chunks_display_mode: ChunksDisplayMode::None,
+        do_render: true,
     }));
 
     let (ctrl_c_tx, ctrl_c_rx) = std::sync::mpsc::channel();
@@ -333,6 +335,7 @@ pub fn main() -> Result<(), PlatformError> {
 
             let f1 = [0xEF, 0x9C, 0x84];
             let f2 = [0xEF, 0x9C, 0x85];
+            let f3 = [0xEF, 0x9C, 0x86];
 
             if let Ok(lvl) = text.parse::<u32>() {
                 state.time_speed = (2_u32).pow(lvl) as f64;
@@ -348,6 +351,9 @@ pub fn main() -> Result<(), PlatformError> {
                 true
             } else if text.as_str().as_bytes() == f2 {
                 state.environment.collect_unused_chunks();
+                true
+            } else if text.as_str().as_bytes() == f3 {
+                state.do_render = !state.do_render;
                 true
             } else if text == "q" {
                 std::fs::write(
@@ -409,18 +415,20 @@ pub fn main() -> Result<(), PlatformError> {
 
                 let mut environment_render_model = state.environment_render_model.borrow_mut();
 
-                let texture = environment_render_model.render(
-                    &state.environment,
-                    &state.camera,
-                    &state.selected_bug_id,
-                    state.active_tool,
-                    state.tool_action_point,
-                    state.tool_action_active,
-                    state.chunks_display_mode.clone(),
-                    window.get_requested_env_canvas_width() as u32,
-                    window.get_requested_env_canvas_height() as u32,
-                );
-                window.set_env_canvas(texture);
+                if state.do_render {
+                    let texture = environment_render_model.render(
+                        &state.environment,
+                        &state.camera,
+                        &state.selected_bug_id,
+                        state.active_tool,
+                        state.tool_action_point,
+                        state.tool_action_active,
+                        state.chunks_display_mode.clone(),
+                        window.get_requested_env_canvas_width() as u32,
+                        window.get_requested_env_canvas_height() as u32,
+                    );
+                    window.set_env_canvas(texture);
+                }
                 window.set_env_info(EnvInfo {
                     now: pretty_duration(
                         state
@@ -468,83 +476,85 @@ pub fn main() -> Result<(), PlatformError> {
                         vision_arc: (bug.vision_half_arc().unwrap().degrees() * 2.) as f32,
                     });
 
-                    if let Some(brain_log) = bug.last_brain_log() {
-                        let mut brain_render_model = state.brain_render_model.borrow_mut();
+                    if state.do_render {
+                        if let Some(brain_log) = bug.last_brain_log() {
+                            let mut brain_render_model = state.brain_render_model.borrow_mut();
 
-                        window.set_brain_canvas(brain_render_model.render(
-                            bug.brain(),
-                            brain_log,
-                            state.selected_node,
-                            window.get_requested_brain_canvas_width() as u32,
-                            window.get_requested_brain_canvas_height() as u32,
-                        ));
+                            window.set_brain_canvas(brain_render_model.render(
+                                bug.brain(),
+                                brain_log,
+                                state.selected_node,
+                                window.get_requested_brain_canvas_width() as u32,
+                                window.get_requested_brain_canvas_height() as u32,
+                            ));
 
-                        window.set_selected_bug_last_brain_log(BugBrainLog {
-                            input: BugBrainInput {
-                                color_of_nearest_bug: color_to_slint_rgba_color(
-                                    &brain_log
+                            window.set_selected_bug_last_brain_log(BugBrainLog {
+                                input: BugBrainInput {
+                                    color_of_nearest_bug: color_to_slint_rgba_color(
+                                        &brain_log
+                                            .input
+                                            .nearest_bug
+                                            .as_ref()
+                                            .map(|x| x.color.clone())
+                                            .unwrap_or(Color {
+                                                a: 0.,
+                                                r: 0.,
+                                                g: 0.,
+                                                b: 0.,
+                                            }),
+                                    )
+                                    .into(),
+                                    direction_to_nearest_bug: brain_log
                                         .input
                                         .nearest_bug
                                         .as_ref()
-                                        .map(|x| x.color.clone())
-                                        .unwrap_or(Color {
-                                            a: 0.,
-                                            r: 0.,
-                                            g: 0.,
-                                            b: 0.,
-                                        }),
-                                )
-                                .into(),
-                                direction_to_nearest_bug: brain_log
-                                    .input
-                                    .nearest_bug
-                                    .as_ref()
-                                    .map(|x| x.direction)
-                                    .unwrap_or(Angle::from_radians(0.))
-                                    .degrees()
-                                    as f32,
-                                direction_to_nearest_food: brain_log
-                                    .input
-                                    .nearest_food
-                                    .as_ref()
-                                    .map(|x| x.direction)
-                                    .unwrap_or(Angle::from_radians(0.))
-                                    .degrees()
-                                    as f32,
-                                rotation: brain_log.input.rotation.degrees() as f32,
-                                proximity_to_bug: brain_log
-                                    .input
-                                    .nearest_bug
-                                    .as_ref()
-                                    .map(|x| x.dst)
-                                    .unwrap_or(noneg_float(1.))
-                                    .unwrap()
-                                    as f32,
-                                proximity_to_food: brain_log
-                                    .input
-                                    .nearest_food
-                                    .as_ref()
-                                    .map(|x| x.dst)
-                                    .unwrap_or(noneg_float(1.))
-                                    .unwrap()
-                                    as f32,
-                            },
-                            output: BugBrainOutput {
-                                baby_charging_rate: brain_log.output.baby_charging_rate.unwrap()
-                                    as f32,
-                                desired_rotation: (bug.rotation()
-                                    + brain_log.output.relative_desired_rotation)
-                                    .degrees()
-                                    as f32,
-                                rotation_velocity: brain_log
-                                    .output
-                                    .rotation_velocity
-                                    .unwrap()
-                                    .degrees()
-                                    as f32,
-                                velocity: brain_log.output.velocity as f32,
-                            },
-                        });
+                                        .map(|x| x.direction)
+                                        .unwrap_or(Angle::from_radians(0.))
+                                        .degrees()
+                                        as f32,
+                                    direction_to_nearest_food: brain_log
+                                        .input
+                                        .nearest_food
+                                        .as_ref()
+                                        .map(|x| x.direction)
+                                        .unwrap_or(Angle::from_radians(0.))
+                                        .degrees()
+                                        as f32,
+                                    rotation: brain_log.input.rotation.degrees() as f32,
+                                    proximity_to_bug: brain_log
+                                        .input
+                                        .nearest_bug
+                                        .as_ref()
+                                        .map(|x| x.dst)
+                                        .unwrap_or(noneg_float(1.))
+                                        .unwrap()
+                                        as f32,
+                                    proximity_to_food: brain_log
+                                        .input
+                                        .nearest_food
+                                        .as_ref()
+                                        .map(|x| x.dst)
+                                        .unwrap_or(noneg_float(1.))
+                                        .unwrap()
+                                        as f32,
+                                },
+                                output: BugBrainOutput {
+                                    baby_charging_rate: brain_log.output.baby_charging_rate.unwrap()
+                                        as f32,
+                                    desired_rotation: (bug.rotation()
+                                        + brain_log.output.relative_desired_rotation)
+                                        .degrees()
+                                        as f32,
+                                    rotation_velocity: brain_log
+                                        .output
+                                        .rotation_velocity
+                                        .unwrap()
+                                        .degrees()
+                                        as f32,
+                                    velocity: brain_log.output.velocity as f32,
+                                },
+                            });
+                        }
                     }
                 }
 
