@@ -205,9 +205,7 @@ impl FoodSourceCreateInfo {
 }
 
 pub(crate) enum EnvironmentRequest {
-    Kill {
-        id: usize,
-    },
+    Suicide,
     GiveBirth {
         chromosome: Chromosome<Float>,
         position: Point<Float>,
@@ -403,7 +401,16 @@ impl<T> Environment<T> {
         for (requester, requests) in requests {
             for request in requests {
                 match request {
-                    EnvironmentRequest::Kill { id } => self.kill(id),
+                    EnvironmentRequest::Suicide => {
+                        let (position, id) = {
+                            let b = requester.bug_ref().unwrap();
+                            (b.position(), b.id())
+                        };
+                        let chunk_found = self
+                            .bugs
+                            .retain_by_position(position, |x| x.borrow().id() != id);
+                        assert!(chunk_found);
+                    }
                     EnvironmentRequest::GiveBirth {
                         chromosome,
                         position,
@@ -443,10 +450,6 @@ impl<T> Environment<T> {
         self.bugs
             .iter()
             .find_map(|bug| bug.try_borrow().ok().filter(|bug| bug.id() == id))
-    }
-
-    fn kill(&mut self, id: usize) {
-        self.bugs.retain(|x| x.borrow().id() != id);
     }
 
     fn transfer_energy_from_food_to_bug(

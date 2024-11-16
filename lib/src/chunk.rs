@@ -177,6 +177,33 @@ impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
         }
     }
 
+    /// return true if any removed
+    pub(crate) fn retain_by_position<F>(&mut self, position: Point<Float>, mut f: F) -> bool
+    where
+        F: FnMut(&T) -> bool,
+    {
+        self.retain_by_position_mut(position, |elem| f(elem))
+    }
+
+    /// return true if any removed
+    pub(crate) fn retain_by_position_mut<F>(&mut self, position: Point<Float>, mut f: F) -> bool
+    where
+        F: FnMut(&mut T) -> bool,
+    {
+        if let Some(chunk) =
+            self.get_chunk_mut(RawChunkIndex::from_position::<W, H>(position).into())
+        {
+            for i in 0..chunk.items.len() {
+                if !f(&mut chunk.items[i]) {
+                    chunk.items.remove(i);
+                    self.len -= 1;
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     pub(crate) fn push(&mut self, v: T)
     where
         T: Position,
@@ -255,6 +282,20 @@ impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
             let inner_part = &part[i.y];
             if i.x < inner_part.len() {
                 Some(&inner_part[i.x])
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    fn get_chunk_mut(&mut self, i: ChunkIndex) -> Option<&mut Chunk<T>> {
+        let part = i.tp.part_mut(self);
+        if i.y < part.len() {
+            let inner_part = &mut part[i.y];
+            if i.x < inner_part.len() {
+                Some(&mut inner_part[i.x])
             } else {
                 None
             }

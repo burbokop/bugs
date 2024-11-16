@@ -619,10 +619,10 @@ impl<T> Bug<T> {
             }
 
             if self.energy_level == noneg_float(0.) {
-                requests.push(EnvironmentRequest::Kill { id: self.id });
+                requests.push(EnvironmentRequest::Suicide);
             }
         } else {
-            requests.push(EnvironmentRequest::Kill { id: self.id });
+            requests.push(EnvironmentRequest::Suicide);
         }
         requests
     }
