@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::utils::Float;
 
-use super::{Abs, Floor, IsNeg, Pi, Sqrt};
+use super::{Abs, Floor, IsNeg, Pi, Sqrt, Zero};
 
 /// Can not store negative numbers
 #[derive(Clone, Copy, Debug)]
@@ -109,6 +109,15 @@ impl<T> NoNeg<T> {
         NoNeg {
             value: self.value.floor(),
         }
+    }
+
+    pub(crate) fn limited_sub<U>(self, rhs: NoNeg<U>) -> NoNeg<<T as Sub<U>>::Output>
+    where
+        T: Sub<U>,
+        <T as Sub<U>>::Output: IsNeg,
+        NoNeg<<T as Sub<U>>::Output>: Zero,
+    {
+        NoNeg::wrap(self.value - rhs.value).unwrap_or(Zero::zero())
     }
 }
 
@@ -225,6 +234,12 @@ where
     }
 }
 
+impl<T: Zero> Zero for NoNeg<T> {
+    fn zero() -> Self {
+        Self { value: T::zero() }
+    }
+}
+
 pub(crate) const fn noneg_f32(value: f32) -> NoNeg<f32> {
     assert!(value >= 0.);
     NoNeg { value }
@@ -238,4 +253,21 @@ pub(crate) const fn noneg_f64(value: f64) -> NoNeg<f64> {
 pub const fn noneg_float(value: Float) -> NoNeg<Float> {
     assert!(value >= 0.);
     NoNeg { value }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::math::noneg_float;
+
+    #[test]
+    fn limited_sub() {
+        assert_eq!(
+            noneg_float(0.5).limited_sub(noneg_float(1.0)),
+            noneg_float(0.0)
+        );
+        assert_eq!(
+            noneg_float(1.0).limited_sub(noneg_float(0.5)),
+            noneg_float(0.5)
+        );
+    }
 }

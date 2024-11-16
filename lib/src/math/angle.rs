@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use super::{Abs, Cos, DegToRad, NoNeg, Pi, RadToDeg, RemEuclid, Sin, Two, Zero};
+use crate::range::Range;
+
+use super::{Abs, Cos, DegToRad, IsNeg, NoNeg, Pi, RadToDeg, RemEuclid, Sin, Two, Zero};
 use std::{
     fmt::Display,
     ops::{Add, AddAssign, Div, Mul, Rem, Sub},
@@ -41,14 +43,14 @@ impl<T> Angle<T> {
         normalize_radians(self.0) / T::pi() * 180.
     }
 
-    pub(crate) fn cos(self) -> <T as Cos>::Output
+    pub fn cos(self) -> <T as Cos>::Output
     where
         T: Cos,
     {
         self.0.cos()
     }
 
-    pub(crate) fn sin(self) -> <T as Sin>::Output
+    pub fn sin(self) -> <T as Sin>::Output
     where
         T: Sin,
     {
@@ -82,9 +84,32 @@ impl<T> Angle<T> {
             },
         }
     }
+
+    pub fn is_contained_in(&self, range: Range<Self>) -> bool
+    where
+        T: Clone
+            + Pi
+            + Two
+            + Zero
+            + Mul<Output = T>
+            + RemEuclid<Output = T>
+            + Add<Output = T>
+            + Sub<Output = T>
+            + Abs<Output = T>
+            + PartialOrd
+            + IsNeg,
+    {
+        if range.end.clone() - range.start.clone() < DeltaAngle::from_radians(T::pi()) {
+            !self.clone().signed_distance(range.start).is_neg()
+                && self.clone().signed_distance(range.end).is_neg()
+        } else {
+            !self.clone().signed_distance(range.start).is_neg()
+                || self.clone().signed_distance(range.end).is_neg()
+        }
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct DeltaAngle<T> {
     value: T,
 }
@@ -132,18 +157,10 @@ impl<U: Display, T: RadToDeg<Output = U> + Clone> Display for Angle<T> {
 }
 
 impl<T> DeltaAngle<NoNeg<T>> {
-    pub(crate) fn unwrap_radians(self) -> T
-    where
-        T: Pi + Two + Mul<Output = T> + Rem<Output = T>,
-    {
-        normalize_delta_radians(self.value.unwrap())
-    }
-
-    pub fn unwrap_degrees(self) -> T
-    where
-        T: Pi + Two + Mul<Output = T> + Mul<f64, Output = T> + Div<Output = T> + Rem<Output = T>,
-    {
-        normalize_delta_radians(self.value.unwrap()) / T::pi() * 180.
+    pub fn unwrap(self) -> DeltaAngle<T> {
+        DeltaAngle {
+            value: self.value.unwrap(),
+        }
     }
 }
 
@@ -169,6 +186,58 @@ where
     }
 }
 
+impl<T, U> Sub<DeltaAngle<U>> for Angle<T>
+where
+    T: Sub<U>,
+{
+    type Output = Angle<<T as Sub<U>>::Output>;
+
+    fn sub(self, rhs: DeltaAngle<U>) -> Self::Output {
+        Self::Output {
+            0: self.0 - rhs.value,
+        }
+    }
+}
+
+impl<T, U> Sub<Angle<U>> for Angle<T>
+where
+    T: Sub<U>,
+{
+    type Output = DeltaAngle<<T as Sub<U>>::Output>;
+
+    fn sub(self, rhs: Angle<U>) -> Self::Output {
+        Self::Output {
+            value: self.0 - rhs.0,
+        }
+    }
+}
+
+impl<T, U> Mul<U> for DeltaAngle<T>
+where
+    T: Mul<U>,
+{
+    type Output = DeltaAngle<<T as Mul<U>>::Output>;
+
+    fn mul(self, rhs: U) -> Self::Output {
+        Self::Output {
+            value: self.value * rhs,
+        }
+    }
+}
+
+impl<T, U> Div<U> for DeltaAngle<T>
+where
+    T: Div<U>,
+{
+    type Output = DeltaAngle<<T as Div<U>>::Output>;
+
+    fn div(self, rhs: U) -> Self::Output {
+        Self::Output {
+            value: self.value / rhs,
+        }
+    }
+}
+
 fn normalize_radians<T>(value: T) -> T
 where
     T: Pi + Two + Mul<Output = T> + RemEuclid<Output = T>,
@@ -181,6 +250,12 @@ where
     T: Pi + Two + Mul<Output = T> + Rem<Output = T>,
 {
     value.rem(T::pi() * T::two())
+}
+
+impl<T: IsNeg> IsNeg for DeltaAngle<T> {
+    fn is_neg(&self) -> bool {
+        self.value.is_neg()
+    }
 }
 
 #[cfg(test)]
@@ -223,6 +298,7 @@ mod tests {
 
     #[test]
     fn normalize_delta() {
+        assert_eq!(super::normalize_delta_radians(PI), PI);
         assert_eq!(super::normalize_delta_radians(0.5 * PI), 0.5 * PI);
         assert_eq!(super::normalize_delta_radians(-0.5 * PI), -0.5 * PI);
         assert_eq!(super::normalize_delta_radians(2.5 * PI), 0.5 * PI);
