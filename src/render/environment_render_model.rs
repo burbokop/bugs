@@ -4,7 +4,11 @@ use crate::{
     Tool, NUKE_RADIUS,
 };
 use bugs_lib::{
-    environment::Environment, food_source::FoodSourceShape, math::{map_into_range, noneg_float, Complex, DeltaAngle, Point, Rect, Size}, range::Range, utils::Float
+    environment::Environment,
+    food_source::FoodSourceShape,
+    math::{map_into_range, noneg_float, Complex, DeltaAngle, Point, Rect, Size},
+    range::Range,
+    utils::Float,
 };
 use font_loader::system_fonts;
 use sdl2::{

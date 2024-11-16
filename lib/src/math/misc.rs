@@ -6,7 +6,7 @@ use std::{
 
 use crate::range::{Range, RangeInclusive};
 
-use super::{MinusOne, One, Zero};
+use super::{Clamp, MinusOne, One, Zero};
 
 pub fn map_into_range<T, I, O>(x: T, input: I, output: O) -> T
 where
@@ -100,6 +100,24 @@ where
             output: output.into(),
         })
     }
+}
+
+pub(crate) fn clamp_into_range<T, I, O>(x: T, input: I, output: O) -> T
+where
+    T: Clone
+        + Add<Output = T>
+        + Sub<Output = T>
+        + Mul<Output = T>
+        + Div<Output = T>
+        + Clamp<Output = T>,
+    I: Into<RangeInclusive<T>>,
+    O: Into<RangeInclusive<T>>,
+{
+    let input: RangeInclusive<T> = input.into();
+    let output: RangeInclusive<T> = output.into();
+    (x.clamp(input.clone()) - input.start.clone()) * (output.end - output.start.clone())
+        / (input.end - input.start)
+        + output.start
 }
 
 pub(crate) fn sign<T>(v: T) -> T
