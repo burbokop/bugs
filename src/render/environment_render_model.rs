@@ -5,7 +5,8 @@ use crate::{
 };
 use bugs_lib::{
     environment::Environment,
-    math::{map_into_range, Complex, DeltaAngle, NoNeg, Point, Rect, Size},
+    math::{map_into_range, noneg_float, Complex, DeltaAngle, Point, Rect, Size},
+    range::Range,
     utils::Float,
 };
 use font_loader::system_fonts;
@@ -435,14 +436,87 @@ impl EnvironmentRenderModel {
                             )
                             .unwrap();
 
-                        canvas
-                            .circle(
-                                *position.x() as i16,
-                                *position.y() as i16,
-                                (bug.vision_range().unwrap() * scale) as i16,
-                                Color::RGB(255, 183, 3),
-                            )
-                            .unwrap();
+                        let arc = Range {
+                            start: bug.rotation() - bug.vision_half_arc().unwrap(),
+                            end: bug.rotation() + bug.vision_half_arc().unwrap(),
+                        };
+
+                        if bug.vision_half_arc() == DeltaAngle::from_radians(noneg_float(PI)) {
+                            canvas
+                                .circle(
+                                    *position.x() as i16,
+                                    *position.y() as i16,
+                                    (bug.vision_range().unwrap() * scale) as i16,
+                                    Color::RGB(255, 183, 3),
+                                )
+                                .unwrap();
+                        } else {
+                            canvas
+                                .arc(
+                                    *position.x() as i16,
+                                    *position.y() as i16,
+                                    (bug.vision_range().unwrap() * scale) as i16,
+                                    arc.start.degrees() as i16,
+                                    arc.end.degrees() as i16,
+                                    Color::RGB(255, 183, 3),
+                                )
+                                .unwrap();
+
+                            canvas
+                                .line(
+                                    *position.x() as i16,
+                                    *position.y() as i16,
+                                    (*position.x()
+                                        + arc.start.cos() * bug.vision_range().unwrap() * scale)
+                                        as i16,
+                                    (*position.y()
+                                        + arc.start.sin() * bug.vision_range().unwrap() * scale)
+                                        as i16,
+                                    Color::RGB(255, 183, 3),
+                                )
+                                .unwrap();
+
+                            canvas
+                                .line(
+                                    *position.x() as i16,
+                                    *position.y() as i16,
+                                    (*position.x()
+                                        + arc.end.cos() * bug.vision_range().unwrap() * scale)
+                                        as i16,
+                                    (*position.y()
+                                        + arc.end.sin() * bug.vision_range().unwrap() * scale)
+                                        as i16,
+                                    Color::RGB(255, 183, 3),
+                                )
+                                .unwrap();
+                        }
+
+                        if let Some(tool_action_point) = tool_action_point {
+                            let yes = if bug.vision_half_arc()
+                                == DeltaAngle::from_radians(noneg_float(PI))
+                            {
+                                true
+                            } else {
+                                (tool_action_point.clone() - bug.position())
+                                    .angle()
+                                    .is_contained_in(arc)
+                            };
+
+                            let tool_action_point = &transformation * &tool_action_point;
+
+                            canvas
+                                .circle(
+                                    *tool_action_point.x() as i16,
+                                    *tool_action_point.y() as i16,
+                                    10,
+                                    if yes {
+                                        Color::RGB(255, 0, 3)
+                                    } else {
+                                        Color::RGB(0, 0, 255)
+                                    },
+                                )
+                                .unwrap();
+                        }
 
                         let chunks_info: Option<(Box<dyn Iterator<Item = (isize, isize)>>, Color)> =
                             match chunks_display_mode {

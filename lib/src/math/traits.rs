@@ -248,7 +248,7 @@ impl Pi for f64 {
     }
 }
 
-pub(crate) trait IsNeg {
+pub trait IsNeg {
     fn is_neg(&self) -> bool;
 }
 

@@ -54,7 +54,7 @@ fn find_nearest_food(c: &mut Criterion) {
         let bug = environment.bugs().next().unwrap();
 
         c.bench_function("find_nearest_food (small)", |b| {
-            b.iter(|| black_box(bug.find_nearest_food(&environment)))
+            b.iter(|| black_box(bug.find_nearest_food_in_vision_arc(&environment)))
         });
     }
     {
@@ -72,7 +72,7 @@ fn find_nearest_food(c: &mut Criterion) {
         let bug = environment.bugs().next().unwrap();
 
         c.bench_function("find_nearest_food (big)", |b| {
-            b.iter(|| black_box(bug.find_nearest_food(&environment)))
+            b.iter(|| black_box(bug.find_nearest_food_in_vision_arc(&environment)))
         });
     }
     {
@@ -96,7 +96,7 @@ fn find_nearest_food(c: &mut Criterion) {
         let bug = environment.bugs().next().unwrap();
 
         c.bench_function("find_nearest_food (big, far)", |b| {
-            b.iter(|| black_box(bug.find_nearest_food(&environment)))
+            b.iter(|| black_box(bug.find_nearest_food_in_vision_arc(&environment)))
         });
     }
 }
@@ -123,7 +123,7 @@ fn find_nearest_bug(c: &mut Criterion) {
         let bug = environment.bugs().next().unwrap();
 
         c.bench_function("find_nearest_bug (small)", |b| {
-            b.iter(|| black_box(bug.find_nearest_bug(&environment)))
+            b.iter(|| black_box(bug.find_nearest_bug_in_vision_arc(&environment)))
         });
     }
     {
@@ -144,7 +144,7 @@ fn find_nearest_bug(c: &mut Criterion) {
         let bug = environment.bugs().next().unwrap();
 
         c.bench_function("find_nearest_bug (big)", |b| {
-            b.iter(|| black_box(bug.find_nearest_bug(&environment)))
+            b.iter(|| black_box(bug.find_nearest_bug_in_vision_arc(&environment)))
         });
     }
     {
@@ -165,7 +165,7 @@ fn find_nearest_bug(c: &mut Criterion) {
         let bug = environment.bugs().next().unwrap();
 
         c.bench_function("find_nearest_bug (big, far)", |b| {
-            b.iter(|| black_box(bug.find_nearest_bug(&environment)))
+            b.iter(|| black_box(bug.find_nearest_bug_in_vision_arc(&environment)))
         });
     }
 }

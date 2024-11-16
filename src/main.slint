@@ -37,6 +37,7 @@ export struct BugInfo  {
     heat-level: float,
     heat-capacity: float,
     vision-range: float,
+    vision-arc: angle,
 }
 
 export struct EnvInfo {
@@ -193,6 +194,11 @@ export component MainWindow inherits Window {
             Text {
                 font-size: 14px;
                 text: "vision range: \{(root.selected-bug-info.vision-range * 100).round() / 100}";
+            }
+
+            Text {
+                font-size: 14px;
+                text: "vision arc: \{(root.selected-bug-info.vision-arc / 1deg).round()}°";
             }
 
             Text {

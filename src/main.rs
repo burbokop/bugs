@@ -466,6 +466,7 @@ pub fn main() -> Result<(), PlatformError> {
                         heat_capacity: bug.heat_capacity().unwrap() as f32,
                         heat_level: bug.heat_level().unwrap() as f32,
                         vision_range: bug.vision_range().unwrap() as f32,
+                        vision_arc: (bug.vision_half_arc().unwrap().degrees() * 2.) as f32,
                     });
 
                     if let Some(brain_log) = bug.last_brain_log() {
@@ -539,7 +540,8 @@ pub fn main() -> Result<(), PlatformError> {
                                 rotation_velocity: brain_log
                                     .output
                                     .rotation_velocity
-                                    .unwrap_degrees()
+                                    .unwrap()
+                                    .degrees()
                                     as f32,
                                 velocity: brain_log.output.velocity as f32,
                             },

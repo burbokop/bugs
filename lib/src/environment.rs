@@ -10,7 +10,7 @@ use crate::{
     bug::Bug,
     chromo_utils::ExtendedChromosome as _,
     chunk::{ChunkedVec, Position, RawChunkIndex},
-    math::{noneg_float, Angle, NoNeg, Point, Rect, Size},
+    math::{noneg_float, Angle, DeltaAngle, NoNeg, Point, Rect, Size},
     range::Range,
     time_point::TimePoint,
     utils::{sample_range_from_range, Float},
@@ -134,6 +134,12 @@ impl Food {
 }
 
 impl Position for Food {
+    fn position(&self) -> Point<Float> {
+        self.position
+    }
+}
+
+impl Position for &Food {
     fn position(&self) -> Point<Float> {
         self.position
     }
@@ -473,21 +479,54 @@ impl<T> Environment<T> {
         self.food.len()
     }
 
-    pub(crate) fn find_nearest_food(
+    pub(crate) fn find_nearest_food_in_vision_arc(
         &self,
         position: Point<Float>,
         range: NoNeg<Float>,
+        vision_rotation: Angle<Float>,
+        vision_half_arc: DeltaAngle<NoNeg<Float>>,
     ) -> Option<(&Food, NoNeg<Float>)> {
-        self.food.find_nearest(position, range)
+        self.food.find_nearest_filter_map(position, range, |food| {
+            let arc = Range {
+                start: vision_rotation - vision_half_arc.unwrap(),
+                end: vision_rotation + vision_half_arc.unwrap(),
+            };
+
+            if vision_half_arc == DeltaAngle::from_radians(noneg_float(PI))
+                || (food.position().clone() - position)
+                    .angle()
+                    .is_contained_in(arc)
+            {
+                Some(food)
+            } else {
+                None
+            }
+        })
     }
 
-    pub(crate) fn find_nearest_bug<'a>(
+    pub(crate) fn find_nearest_bug_in_vision_arc<'a>(
         &'a self,
         position: Point<Float>,
         range: NoNeg<Float>,
+        vision_rotation: Angle<Float>,
+        vision_half_arc: DeltaAngle<NoNeg<Float>>,
     ) -> Option<(Ref<'a, Bug<T>>, NoNeg<Float>)> {
-        self.bugs
-            .find_nearest_filter_map(position, range, |x| x.try_borrow().ok())
+        self.bugs.find_nearest_filter_map(position, range, |x| {
+            x.try_borrow().ok().and_then(|other| {
+                if vision_half_arc == DeltaAngle::from_radians(noneg_float(PI))
+                    || (other.position().clone() - position)
+                        .angle()
+                        .is_contained_in(Range {
+                            start: vision_rotation - vision_half_arc.unwrap(),
+                            end: vision_rotation + vision_half_arc.unwrap(),
+                        })
+                {
+                    Some(other)
+                } else {
+                    None
+                }
+            })
+        })
     }
 
     pub fn food_sources(&self) -> &[FoodSource<T>] {

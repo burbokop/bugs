@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::{cell::Ref, error::Error, f64::consts::PI, fmt::Display, ops::Deref, time::Duration};
+use std::{cell::Ref, error::Error, f64::consts::PI, fmt::Display, time::Duration};
 
 use chromosome::Chromosome;
 use rand::Rng;
@@ -75,6 +75,8 @@ pub struct Bug<T> {
     heat_level: NoNeg<Float>,
     #[serde(skip)]
     vision_range: NoNeg<Float>,
+    #[serde(skip)]
+    vision_half_arc: DeltaAngle<NoNeg<Float>>,
 }
 
 impl<T> Position for RefCell<Bug<T>> {
@@ -125,6 +127,7 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Bug<T> {
             baby_charge_capacity_per_size: features.baby_charge_capacity_per_size,
             heat_level: val.heat_level,
             vision_range: features.vision_range,
+            vision_half_arc: features.vision_half_arc,
         })
     }
 }
@@ -146,6 +149,7 @@ struct GeneticFeatures {
     size: NoNeg<Float>,
     color: Color,
     vision_range: NoNeg<Float>,
+    vision_half_arc: DeltaAngle<NoNeg<Float>>,
     baby_charge_capacity_per_size: NoNeg<Float>,
 }
 
@@ -157,7 +161,15 @@ impl GeneticFeatures {
             Duration::from_secs_f64(body_genes[0].abs() * body_genes[1].abs() * 60. * 60. * 24.);
         let size = body_genes[1].abs_as_noneg();
         let baby_charge_capacity_per_size = body_genes[2].abs_as_noneg();
-        let vision_range = body_genes[3].abs_as_noneg() * noneg_float(100.);
+        static VISION_RANGE_MUL: NoNeg<Float> = noneg_float(100.);
+        let vision_range = body_genes[3].abs_as_noneg() * VISION_RANGE_MUL;
+        static VISION_ARC_MUL: NoNeg<Float> = noneg_float(0.1);
+        let vision_half_arc = DeltaAngle::from_radians(
+            noneg_float(0.5)
+                / (body_genes[3].abs_as_noneg().limited_sub(noneg_float(1.)) * VISION_ARC_MUL
+                    + noneg_float(0.5 / PI)),
+        );
+
         let color = Color {
             a: 1.,
             r: body_genes[4].rem_euclid(1.),
@@ -171,6 +183,7 @@ impl GeneticFeatures {
             size,
             color,
             vision_range,
+            vision_half_arc,
             baby_charge_capacity_per_size,
         }
     }
@@ -252,6 +265,10 @@ impl<T> Bug<T> {
         self.vision_range
     }
 
+    pub fn vision_half_arc(&self) -> DeltaAngle<NoNeg<Float>> {
+        self.vision_half_arc
+    }
+
     pub fn eat_range(&self) -> NoNeg<Float> {
         self.size * EAT_FOOD_MAX_PROXIMITY
     }
@@ -282,6 +299,7 @@ impl<T> Bug<T> {
             baby_charge_capacity_per_size: features.baby_charge_capacity_per_size,
             heat_level: noneg_float(0.),
             vision_range: features.vision_range,
+            vision_half_arc: features.vision_half_arc,
         };
 
         *next_id += 1;
@@ -318,6 +336,7 @@ impl<T> Bug<T> {
             baby_charge_capacity_per_size: features.baby_charge_capacity_per_size,
             heat_level: noneg_float(0.),
             vision_range: features.vision_range,
+            vision_half_arc: features.vision_half_arc,
         }
     }
 
@@ -356,6 +375,7 @@ impl<T> Bug<T> {
                 baby_charge_capacity_per_size: features.baby_charge_capacity_per_size,
                 heat_level: noneg_float(0.),
                 vision_range: features.vision_range,
+                vision_half_arc: features.vision_half_arc,
             });
             *next_id += 1;
         }
@@ -378,22 +398,11 @@ impl<T> Bug<T> {
             baby_charge_capacity_per_size: features.baby_charge_capacity_per_size,
             heat_level: noneg_float(0.),
             vision_range: features.vision_range,
+            vision_half_arc: features.vision_half_arc,
         });
         *next_id += 1;
 
         result
-    }
-
-    fn dst_to_bug(&self, other: &Self) -> NoNeg<Float> {
-        NoNeg::wrap((self.position - other.position).len()).unwrap()
-    }
-
-    fn dst_to_food(&self, other: &Food) -> NoNeg<Float> {
-        NoNeg::wrap((self.position - other.position()).len()).unwrap()
-    }
-
-    fn manhattan_dst_to_food(&self, other: &Food) -> NoNeg<Float> {
-        NoNeg::wrap((self.position - other.position()).manhattan_len()).unwrap()
     }
 
     /// return in redians
@@ -406,18 +415,28 @@ impl<T> Bug<T> {
         (other.position() - self.position).angle()
     }
 
-    pub fn find_nearest_bug<'a>(
+    pub fn find_nearest_bug_in_vision_arc<'a>(
         &self,
         env: &'a Environment<T>,
     ) -> Option<(Ref<'a, Self>, NoNeg<Float>)> {
-        env.find_nearest_bug(self.position, self.vision_range)
+        env.find_nearest_bug_in_vision_arc(
+            self.position,
+            self.vision_range,
+            self.rotation(),
+            self.vision_half_arc(),
+        )
     }
 
-    pub fn find_nearest_food<'a>(
+    pub fn find_nearest_food_in_vision_arc<'a>(
         &self,
         env: &'a Environment<T>,
     ) -> Option<(&'a Food, NoNeg<Float>)> {
-        env.find_nearest_food(self.position, self.vision_range)
+        env.find_nearest_food_in_vision_arc(
+            self.position,
+            self.vision_range,
+            self.rotation(),
+            self.vision_half_arc(),
+        )
     }
 
     fn reproduce_asexually<R: RngCore>(&self, rng: &mut R) -> EnvironmentRequest
@@ -469,7 +488,7 @@ impl<T> Bug<T> {
             }
 
             let nearest_food = self
-                .find_nearest_food(env)
+                .find_nearest_food_in_vision_arc(env)
                 .map(|(food, dst)| NearestFoodInfo {
                     food,
                     brain_input: brain::FoodInfo {
@@ -479,14 +498,16 @@ impl<T> Bug<T> {
                     },
                 });
 
-            let nearest_bug = self.find_nearest_bug(env).map(|(bug, dst)| NearestBugInfo {
-                brain_input: brain::BugInfo {
-                    dst,
-                    direction: self.direction_to_bug(&bug),
-                    color: bug.color.clone(),
-                    relative_radius: bug.eat_range() / self.eat_range(),
-                },
-            });
+            let nearest_bug =
+                self.find_nearest_bug_in_vision_arc(env)
+                    .map(|(bug, dst)| NearestBugInfo {
+                        brain_input: brain::BugInfo {
+                            dst,
+                            direction: self.direction_to_bug(&bug),
+                            color: bug.color.clone(),
+                            relative_radius: bug.eat_range() / self.eat_range(),
+                        },
+                    });
 
             let brain_input = brain::Input {
                 energy_level: self.energy_level,
@@ -521,7 +542,7 @@ impl<T> Bug<T> {
                         sign(raw_delta)
                             * raw_delta
                                 .abs()
-                                .min(brain_output.rotation_velocity.unwrap_radians())
+                                .min(brain_output.rotation_velocity.unwrap().radians())
                             * 0.1
                             * dt.as_secs_f64(),
                     );
