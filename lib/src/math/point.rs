@@ -19,6 +19,18 @@ impl<T> From<(T, T)> for Point<T> {
     }
 }
 
+impl<T> From<Point<T>> for (T, T) {
+    fn from(value: Point<T>) -> Self {
+        todo!()
+    }
+}
+
+impl<T> From<Point<T>> for [T; 2] {
+    fn from(value: Point<T>) -> Self {
+        [value.x, value.y]
+    }
+}
+
 impl<T: Sub> Sub for Point<T> {
     type Output = Vector<<T as Sub>::Output>;
     fn sub(self, rhs: Self) -> Self::Output {
@@ -42,5 +54,23 @@ impl<T> Point<T> {
     }
     pub fn y(&self) -> &T {
         &self.y
+    }
+}
+
+impl Point<f32> {
+    pub fn as_f64(self) -> Point<f64> {
+        Point {
+            x: self.x as f64,
+            y: self.y as f64,
+        }
+    }
+}
+
+impl Point<f64> {
+    pub fn as_f32(self) -> Point<f32> {
+        Point {
+            x: self.x as f32,
+            y: self.y as f32,
+        }
     }
 }

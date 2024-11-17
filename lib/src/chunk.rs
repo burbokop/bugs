@@ -43,7 +43,7 @@ pub(crate) trait Position {
     fn position(&self) -> Point<Float>;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ChunkType {
     FromTopLeft,
     FromTopRight,
@@ -101,6 +101,7 @@ impl ChunkType {
         }
     }
 
+    #[inline]
     pub fn values() -> [Self; 4] {
         [
             Self::FromTopLeft,
@@ -121,7 +122,7 @@ pub(crate) struct ChunkedVec<T, const W: usize, const H: usize> {
 }
 
 impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
-    pub(crate) fn chunks(&self) -> Vec<(RawChunkIndex, usize)> {
+    pub(crate) fn chunks_old(&self) -> Vec<(RawChunkIndex, usize)> {
         let mut result: Vec<(RawChunkIndex, usize)> = Default::default();
         for tp in ChunkType::values() {
             let rows = tp.clone().part(self);
@@ -142,6 +143,23 @@ impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
             }
         }
         result
+    }
+
+    pub(crate) fn chunks<'a>(&'a self) -> impl Iterator<Item = (RawChunkIndex, usize)> + 'a {
+        ChunkType::values()
+            .into_iter()
+            .map(|tp| {
+                tp.part(self)
+                    .iter()
+                    .enumerate()
+                    .map(move |(y, rows)| {
+                        rows.iter().enumerate().map(move |(x, chunk)| {
+                            (ChunkIndex { tp, x, y }.into(), chunk.items.len())
+                        })
+                    })
+                    .flatten()
+            })
+            .flatten()
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -675,3 +693,62 @@ impl<T, const W: usize, const H: usize> Iterator for CircularTraverseIterator<T,
         }
     }
 }
+
+// pub struct ChunksIter<'a, T, const W: usize, const H: usize> {
+//     t: usize,
+//     y: usize,
+//     x: usize,
+//     vec: &'a ChunkedVec<T, W, H>,
+// }
+
+// impl<'a, T, const W: usize, const H: usize> Iterator for ChunksIter<'a, T, W, H> {
+//     type Item = (RawChunkIndex, usize);
+
+//     fn next(&mut self) -> Option<Self::Item> {
+//         let tp = &ChunkType::values()[self.t];
+//         let chunk = &tp.clone().part(self.vec)[self.y][self.x];
+
+//         let res = (
+//             ChunkIndex {
+//                 tp: tp.clone(),
+//                 x: self.x,
+//                 y: self.y,
+//             }
+//             .into(),
+//             chunk.items.len(),
+//         );
+
+//         if self.t < 4 {
+//             let tp = &ChunkType::values()[self.t];
+//             let rows = tp.part(self.vec);
+//             if self.y < rows.len() {
+//                 let cols = &rows[self.y];
+//                 if self.x < cols.len() {
+//                 } else {
+//                     self.y += 1;
+//                     self.x = 0;
+//                     s
+//                 }
+//             } else {
+//                 self.t += 1;
+//                 self.y = 0;
+//             }
+//         } else {
+//             return None;
+//         }
+
+//         self.x += 1;
+//         if self.x < tp.clone().part(self.vec)[self.y].len() {
+//             self.x = 0;
+//             self.y += 1;
+//             if self.y >= tp.part(self.vec).len() {
+//                 self.y = 0;
+//                 self.t += 1;
+//                 if self.t >= 4 {
+//                     return None;
+//                 }
+//             }
+//         }
+//         Some(res)
+//     }
+// }

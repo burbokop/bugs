@@ -603,7 +603,7 @@ impl<T> Environment<T> {
             ))));
     }
 
-    pub fn food_chunks(&self) -> Vec<(RawChunkIndex, usize)> {
+    pub fn food_chunks<'a>(&'a self) -> impl Iterator<Item = (RawChunkIndex, usize)> + 'a {
         self.food.chunks()
     }
 
@@ -618,7 +618,7 @@ impl<T> Environment<T> {
         })
     }
 
-    pub fn bug_chunks(&self) -> Vec<(RawChunkIndex, usize)> {
+    pub fn bug_chunks<'a>(&'a self) -> impl Iterator<Item = (RawChunkIndex, usize)> + 'a {
         self.bugs.chunks()
     }
 

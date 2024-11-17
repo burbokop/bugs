@@ -585,13 +585,13 @@ where
 
 impl Matrix<f32> {
     pub fn as_f64(self) -> Matrix<f64> {
-        Matrix(self.0.map(|x|x as f64))
+        Matrix(self.0.map(|x| x as f64))
     }
 }
 
 impl Matrix<f64> {
     pub fn as_f32(self) -> Matrix<f32> {
-        Matrix(self.0.map(|x|x as f32))
+        Matrix(self.0.map(|x| x as f32))
     }
 }
 

@@ -333,8 +333,7 @@ pub fn main() -> Result<(), PlatformError> {
                     position,
                 );
             } else if shift {
-
-            // let delta_y = delta_y * 100.;
+                // let delta_y = delta_y * 100.;
 
                 // scroll horizontally
                 state.camera.add_translation(
@@ -426,10 +425,10 @@ pub fn main() -> Result<(), PlatformError> {
     let render_timer = Timer::default();
 
     {
-        #[cfg(not(debug_assertions))]
-        let render_interval = Duration::from_millis(1000 / 30);
-        #[cfg(debug_assertions)]
-        let render_interval = Duration::from_millis(2000);
+        let render_interval = match renderer {
+            Renderer::Sdl => Duration::from_millis(1000 / 30),
+            Renderer::Vulkan => Duration::from_millis(1000 / 60),
+        };
 
         let weak_state = Rc::downgrade(&state);
         let weak_window = main_window.as_weak();

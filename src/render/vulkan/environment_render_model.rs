@@ -1,6 +1,6 @@
 use bugs_lib::{
     environment::Environment,
-    math::{map_into_range, Matrix, Point, Rect, Size},
+    math::{map_into_range, Point, Rect, Size},
     utils::{Color, Float},
 };
 use slint::{Rgba8Pixel, SharedPixelBuffer};
@@ -29,7 +29,6 @@ use vulkano::{
     image::{view::ImageView, Image, ImageCreateInfo, ImageUsage},
     instance::{Instance, InstanceCreateFlags, InstanceCreateInfo},
     memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator},
-    padded::Padded,
     pipeline::{
         graphics::{
             color_blend::{ColorBlendAttachmentState, ColorBlendState},
@@ -49,15 +48,57 @@ use vulkano::{
     VulkanLibrary,
 };
 
-mod glsl_convertions {
-    use super::*;
-    pub(super) fn matrix_to_mat3<T>(m: Matrix<T>) -> [Padded<[T; 3], 4>; 3] {
-        let [a, b, c, d, e, f, g, h, i] = m.into();
-        [[a, b, c].into(), [d, e, f].into(), [g, h, i].into()]
-    }
+use super::glsl_convertions;
 
-    pub(super) fn size_to_vec2<T>(m: Size<T>) -> [T; 2] {
-        m.into()
+mod vs {
+    vulkano_shaders::shader! {
+        ty: "vertex",
+        src: r"
+        #version 450
+
+        layout(location = 0) in vec2 position;
+        layout(location = 1) in vec4 color;
+
+        layout(location = 0) out vec4 color_output;
+
+        layout(set = 0, binding = 0) uniform Global {
+            mat3 transformation;
+            vec2 view_port_size;
+        } global;
+
+        vec2 transform(vec2 p) {
+            vec3 v = vec3(p, 1.0) * global.transformation;
+            return vec2(
+                v.x / v.z,
+                v.y / v.z);
+        }
+
+        vec2 reorigin(vec2 p) {
+            return ((p - global.view_port_size / 2) / global.view_port_size) * 2.;
+        }
+
+        void main() {
+            gl_Position = vec4(reorigin(transform(position)), 0.0, 1.0);
+            color_output = color;
+        }
+    ",
+    }
+}
+
+mod fs {
+    vulkano_shaders::shader! {
+        ty: "fragment",
+        src: r"
+        #version 450
+
+        layout(location = 0) in vec4 color;
+
+        layout(location = 0) out vec4 f_color;
+
+        void main() {
+            f_color = color;
+        }
+    ",
     }
 }
 
@@ -66,12 +107,15 @@ mod glsl_convertions {
 struct Vertex {
     #[format(R32G32_SFLOAT)]
     position: [f32; 2],
+    #[format(R32G32B32A32_SFLOAT)]
+    color: [f32; 4],
 }
 
 impl Vertex {
     fn from_point(p: Point<Float>, c: Color) -> Self {
         Self {
-            position: [*p.x() as f32, *p.y() as f32],
+            position: glsl_convertions::point_to_vec2(p.as_f32()),
+            color: glsl_convertions::color_to_vec4(c),
         }
     }
 }
@@ -309,8 +353,7 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
         let mut shapes: VertexShapeVec = Default::default();
 
         for (index, ocupants_count) in environment.food_chunks() {
-            let rect = &transformation
-            * &Rect::from((
+            let rect = &Rect::from((
                 index.x() as Float * 256.,
                 index.y() as Float * 256.,
                 256.,
@@ -319,15 +362,14 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
             // if view_port_rect.contains(&rect) || view_port_rect.instersects(&rect) {
             draw_chunk_simplified(
                 &mut shapes,
-                rect,
+                *rect,
                 ocupants_count,
                 Color::from_rgb24(255, 110, 162),
             )
             // }
         }
         for (index, ocupants_count) in environment.bug_chunks() {
-            let rect = &transformation
-            * &Rect::from((
+            let rect = &Rect::from((
                 index.x() as Float * 256.,
                 index.y() as Float * 256.,
                 256.,
@@ -336,26 +378,14 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
             // if view_port_rect.contains(&rect) || view_port_rect.instersects(&rect) {
             draw_chunk_simplified(
                 &mut shapes,
-                rect,
+                *rect,
                 ocupants_count,
                 Color::from_rgb24(0, 0, 255),
             )
             // }
         }
 
-        shapes.push(vertex_shapes::rect(
-            (-0.05, -0.05, 0.1, 0.1).into(),
-            Color {
-                a: 1.,
-                r: 0.,
-                g: 1.,
-                b: 0.,
-            },
-        ));
-
         let (vertices, indices) = shapes.into();
-
-        // println!("vertices: {:?}", &vertices);
 
         let vertex_buffer = Buffer::from_iter(
             self.memory_allocator.clone(),
@@ -386,59 +416,6 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
             indices,
         )
         .unwrap();
-
-        mod vs {
-            vulkano_shaders::shader! {
-                ty: "vertex",
-                src: r"
-                #version 450
-
-                layout(location = 0) in vec2 position;
-                layout(location = 1) out vec4 color;
-
-                layout(set = 0, binding = 0) uniform Global {
-                    mat3 transformation;
-                    vec2 view_port_size;
-                } global;
-
-                vec2 transform(vec2 p) {
-                    vec3 v = vec3(p, 1.0) * global.transformation;
-
-                    // return v.xy;
-                    // v.z = 1.;
-                    return vec2(
-                        v.x / v.z,
-                        v.y / v.z);
-                }
-
-                vec2 reorigin(vec2 p) {
-                    return ((p - global.view_port_size / 2) / global.view_port_size) * 2.;
-                }
-
-                void main() {
-                    gl_Position = vec4(reorigin(position), 0.0, 1.0);
-                    // gl_Position = vec4(reorigin(transform(position)), 0.0, 1.0);
-                    color = gl_Position;
-                }
-            ",
-            }
-        }
-
-        mod fs {
-            vulkano_shaders::shader! {
-                ty: "fragment",
-                src: r"
-                #version 450
-
-                layout(location = 0) out vec4 f_color;
-                layout(location = 1) in vec4 color;
-
-                void main() {
-                    f_color = color;
-                }
-            ",
-            }
-        }
 
         let render_pass = vulkano::single_pass_renderpass!(
             self.device.clone(),
@@ -499,7 +476,6 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
             )
             .unwrap();
 
-            // println!("descriptor_counts: {:?}" , layout.set_layouts().get(0).unwrap().descriptor_counts()) ;
             assert!(
                 layout
                     .set_layouts()
@@ -561,11 +537,6 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
             view_port_size: glsl_convertions::size_to_vec2(view_port_rect.size().as_f32()),
         };
 
-        println!(
-            "global_uniform_object: {:?}, {:?}",
-            global_uniform_object.transformation, global_uniform_object.view_port_size
-        );
-
         let global_uniform_buffer = Buffer::from_data(
             self.memory_allocator.clone(),
             BufferCreateInfo {
@@ -593,7 +564,9 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
         builder
             .begin_render_pass(
                 RenderPassBeginInfo {
-                    clear_values: vec![Some([0.0, 0.0, 1.0, 1.0].into())],
+                    clear_values: vec![Some(
+                        glsl_convertions::color_to_vec4(Color::from_rgb24(211, 250, 199)).into(),
+                    )],
                     // This framebuffer has the offscreen image attached to it.
                     ..RenderPassBeginInfo::framebuffer(framebuffer.clone())
                 },
@@ -643,14 +616,8 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
             .wait(None)
             .unwrap();
 
-        // Access the bytes copied into the host-accessible output buffer by reference.
         let buffer_content = render_output_buf.read().unwrap();
-
         assert_eq!(buffer.make_mut_bytes().len(), buffer_content.len());
-
-        // buffer.make_mut_bytes().clone_from_slice(&buffer_content);
-        for i in 0..buffer.make_mut_bytes().len() {
-            buffer.make_mut_bytes()[i] = buffer_content[i];
-        }
+        buffer.make_mut_bytes().clone_from_slice(&buffer_content);
     }
 }
