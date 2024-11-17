@@ -1,6 +1,10 @@
 use super::Camera;
 use crate::Tool;
-use bugs_lib::{environment::Environment, math::{Point, Size}, utils::Float};
+use bugs_lib::{
+    environment::Environment,
+    math::{Point, Size},
+    utils::Float,
+};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -68,7 +72,8 @@ impl<T> EnvironmentRenderer<T> {
             || self.buffer.height() != requested_canvas_height
         {
             self.buffer = SharedPixelBuffer::new(requested_canvas_width, requested_canvas_height);
-            self.model.init((self.buffer.width(), self.buffer.height()).into());
+            self.model
+                .init((self.buffer.width(), self.buffer.height()).into());
         }
 
         self.model.render(

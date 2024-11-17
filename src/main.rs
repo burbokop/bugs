@@ -323,6 +323,8 @@ pub fn main() -> Result<(), PlatformError> {
                 return velocity * angle_delta / default_deltas_per_step;
             };
 
+            // let delta_y = delta_y / 100.;
+
             if control {
                 // zoom
                 state.camera.concat_scale_centered(
@@ -331,6 +333,9 @@ pub fn main() -> Result<(), PlatformError> {
                     position,
                 );
             } else if shift {
+
+            // let delta_y = delta_y * 100.;
+
                 // scroll horizontally
                 state.camera.add_translation(
                     (angle_delta_to_translation_delta(delta_y as Float), 0.).into(),

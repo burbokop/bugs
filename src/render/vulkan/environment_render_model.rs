@@ -1,7 +1,7 @@
 use bugs_lib::{
     environment::Environment,
-    math::{Point, Size},
-    utils::Float,
+    math::{map_into_range, Matrix, Point, Rect, Size},
+    utils::{Color, Float},
 };
 use slint::{Rgba8Pixel, SharedPixelBuffer};
 
@@ -18,37 +18,137 @@ use vulkano::{
         CopyImageToBufferInfo, PrimaryCommandBufferAbstract, RenderPassBeginInfo, SubpassBeginInfo,
         SubpassContents,
     },
+    descriptor_set::{
+        allocator::StandardDescriptorSetAllocator, PersistentDescriptorSet, WriteDescriptorSet,
+    },
     device::{
         physical::{PhysicalDevice, PhysicalDeviceType},
-        Device, DeviceCreateInfo, Queue, QueueCreateInfo, QueueFlags,
+        Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags,
     },
     format::Format,
     image::{view::ImageView, Image, ImageCreateInfo, ImageUsage},
     instance::{Instance, InstanceCreateFlags, InstanceCreateInfo},
     memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator},
+    padded::Padded,
     pipeline::{
         graphics::{
             color_blend::{ColorBlendAttachmentState, ColorBlendState},
             input_assembly::InputAssemblyState,
             multisample::MultisampleState,
             rasterization::RasterizationState,
-            vertex_input::{Vertex, VertexDefinition},
+            vertex_input::{self, Vertex as _, VertexDefinition},
             viewport::{Viewport, ViewportState},
             GraphicsPipelineCreateInfo,
         },
         layout::PipelineDescriptorSetLayoutCreateInfo,
-        GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo,
+        GraphicsPipeline, Pipeline, PipelineBindPoint, PipelineLayout,
+        PipelineShaderStageCreateInfo,
     },
     render_pass::{Framebuffer, FramebufferCreateInfo, Subpass},
     sync::GpuFuture,
     VulkanLibrary,
 };
 
-#[derive(BufferContents, Vertex)]
+mod glsl_convertions {
+    use super::*;
+    pub(super) fn matrix_to_mat3<T>(m: Matrix<T>) -> [Padded<[T; 3], 4>; 3] {
+        let [a, b, c, d, e, f, g, h, i] = m.into();
+        [[a, b, c].into(), [d, e, f].into(), [g, h, i].into()]
+    }
+
+    pub(super) fn size_to_vec2<T>(m: Size<T>) -> [T; 2] {
+        m.into()
+    }
+}
+
+#[derive(Debug, BufferContents, vertex_input::Vertex)]
 #[repr(C)]
-struct MyVertex {
+struct Vertex {
     #[format(R32G32_SFLOAT)]
     position: [f32; 2],
+}
+
+impl Vertex {
+    fn from_point(p: Point<Float>, c: Color) -> Self {
+        Self {
+            position: [*p.x() as f32, *p.y() as f32],
+        }
+    }
+}
+
+struct VertexShape<const V: usize, const I: usize> {
+    vertices: [Vertex; V],
+    indices: [u32; I],
+}
+
+struct VertexShapeVec {
+    vertices: Vec<Vertex>,
+    indices: Vec<u32>,
+}
+
+impl Default for VertexShapeVec {
+    fn default() -> Self {
+        Self {
+            vertices: Default::default(),
+            indices: Default::default(),
+        }
+    }
+}
+
+impl VertexShapeVec {
+    pub fn push<const V: usize, const I: usize>(&mut self, shape: VertexShape<V, I>) {
+        let offset = self.vertices.len() as u32;
+        self.vertices.extend(shape.vertices.into_iter());
+        self.indices
+            .extend(shape.indices.into_iter().map(|i| offset + i));
+    }
+}
+
+impl From<VertexShapeVec> for (Vec<Vertex>, Vec<u32>) {
+    fn from(value: VertexShapeVec) -> Self {
+        (value.vertices, value.indices)
+    }
+}
+
+mod vertex_shapes {
+    use super::*;
+
+    pub(super) fn rect(r: Rect<Float>, c: Color) -> VertexShape<4, 6> {
+        VertexShape {
+            vertices: [
+                Vertex::from_point(r.left_top(), c.clone()),
+                Vertex::from_point(r.right_top(), c.clone()),
+                Vertex::from_point(r.right_bottom(), c.clone()),
+                Vertex::from_point(r.left_bottom(), c.clone()),
+            ],
+            indices: [0, 1, 2, 0, 2, 3],
+        }
+    }
+}
+
+fn draw_chunk_simplified(
+    shapes: &mut VertexShapeVec,
+    rect: Rect<Float>,
+    ocupants_count: usize,
+    color: Color,
+) {
+    if ocupants_count > 0 {
+        let max_ocupants_count = 8;
+        shapes.push(vertex_shapes::rect(
+            rect,
+            if ocupants_count >= max_ocupants_count {
+                color
+            } else {
+                color.map_a(|a| {
+                    map_into_range(
+                        ocupants_count as Float,
+                        0. ..max_ocupants_count as Float,
+                        (a / 16.)..a,
+                    )
+                })
+            },
+        ));
+    }
 }
 
 pub struct VulkanEnvironmentRenderModel {
@@ -58,9 +158,9 @@ pub struct VulkanEnvironmentRenderModel {
     queue_family_index: u32,
     device: Arc<Device>,
     queue: Arc<Queue>,
-    vertex_buffer: Subbuffer<[MyVertex]>,
     format: Format,
     memory_allocator: Arc<StandardMemoryAllocator>,
+    descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
     render_output_image: Option<Arc<Image>>,
     render_output_buf: Option<Subbuffer<[u8]>>,
 }
@@ -107,6 +207,10 @@ impl Default for VulkanEnvironmentRenderModel {
         let (device, mut queues) = Device::new(
             physical_device.clone(),
             DeviceCreateInfo {
+                enabled_extensions: DeviceExtensions {
+                    khr_storage_buffer_storage_class: true,
+                    ..DeviceExtensions::empty()
+                },
                 queue_create_infos: vec![QueueCreateInfo {
                     queue_family_index,
                     ..Default::default()
@@ -119,31 +223,10 @@ impl Default for VulkanEnvironmentRenderModel {
         let queue = queues.next().unwrap();
         let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
 
-        let vertices = [
-            MyVertex {
-                position: [-0.5, -0.25],
-            },
-            MyVertex {
-                position: [0.0, 0.5],
-            },
-            MyVertex {
-                position: [0.25, -0.1],
-            },
-        ];
-        let vertex_buffer = Buffer::from_iter(
-            memory_allocator.clone(),
-            BufferCreateInfo {
-                usage: BufferUsage::VERTEX_BUFFER,
-                ..Default::default()
-            },
-            AllocationCreateInfo {
-                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                ..Default::default()
-            },
-            vertices,
-        )
-        .unwrap();
+        let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(
+            device.clone(),
+            Default::default(),
+        ));
 
         let format = Format::R8G8B8A8_UNORM;
 
@@ -154,8 +237,9 @@ impl Default for VulkanEnvironmentRenderModel {
             queue_family_index,
             device,
             queue,
-            vertex_buffer,format,
+            format,
             memory_allocator,
+            descriptor_set_allocator,
             render_output_buf: None,
             render_output_image: None,
         }
@@ -169,32 +253,36 @@ impl Default for VulkanEnvironmentRenderModel {
 impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
     fn init(&mut self, view_port_size: Size<u32>) {
         let format = self.format;
-        self. render_output_image = Some(Image::new(
-            self.memory_allocator.clone(),
-            ImageCreateInfo {
-                format,
-                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::TRANSFER_SRC,
-                extent: [*view_port_size.w(), *view_port_size.h(), 1],
-                ..Default::default()
-            },
-            AllocationCreateInfo::default(),
-        )
-        .unwrap());
+        self.render_output_image = Some(
+            Image::new(
+                self.memory_allocator.clone(),
+                ImageCreateInfo {
+                    format,
+                    usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::TRANSFER_SRC,
+                    extent: [*view_port_size.w(), *view_port_size.h(), 1],
+                    ..Default::default()
+                },
+                AllocationCreateInfo::default(),
+            )
+            .unwrap(),
+        );
 
-        self. render_output_buf = Some(Buffer::from_iter(
-            self.memory_allocator.clone(),
-            BufferCreateInfo {
-                usage: BufferUsage::TRANSFER_DST,
-                ..Default::default()
-            },
-            AllocationCreateInfo {
-                memory_type_filter: MemoryTypeFilter::PREFER_HOST
-                    | MemoryTypeFilter::HOST_RANDOM_ACCESS,
-                ..Default::default()
-            },
-            (0..(*view_port_size.w() * *view_port_size.h() * 4)).map(|_| 0u8),
-        )
-        .unwrap());
+        self.render_output_buf = Some(
+            Buffer::from_iter(
+                self.memory_allocator.clone(),
+                BufferCreateInfo {
+                    usage: BufferUsage::TRANSFER_DST,
+                    ..Default::default()
+                },
+                AllocationCreateInfo {
+                    memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                        | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+                    ..Default::default()
+                },
+                (0..(*view_port_size.w() * *view_port_size.h() * 4)).map(|_| 0u8),
+            )
+            .unwrap(),
+        );
     }
 
     fn render(
@@ -214,8 +302,90 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
         );
         let buffer_size: Size<u32> = (buffer.width(), buffer.height()).into();
 
-        let render_output_buf = self.render_output_buf.clone().unwrap();
-        let render_output_image = self.render_output_image.clone().unwrap();
+        let transformation = camera.transformation();
+        let view_port_rect: Rect<_> =
+            (0., 0., *buffer_size.w() as Float, *buffer_size.h() as Float).into();
+
+        let mut shapes: VertexShapeVec = Default::default();
+
+        for (index, ocupants_count) in environment.food_chunks() {
+            let rect = &transformation
+            * &Rect::from((
+                index.x() as Float * 256.,
+                index.y() as Float * 256.,
+                256.,
+                256.,
+            ));
+            // if view_port_rect.contains(&rect) || view_port_rect.instersects(&rect) {
+            draw_chunk_simplified(
+                &mut shapes,
+                rect,
+                ocupants_count,
+                Color::from_rgb24(255, 110, 162),
+            )
+            // }
+        }
+        for (index, ocupants_count) in environment.bug_chunks() {
+            let rect = &transformation
+            * &Rect::from((
+                index.x() as Float * 256.,
+                index.y() as Float * 256.,
+                256.,
+                256.,
+            ));
+            // if view_port_rect.contains(&rect) || view_port_rect.instersects(&rect) {
+            draw_chunk_simplified(
+                &mut shapes,
+                rect,
+                ocupants_count,
+                Color::from_rgb24(0, 0, 255),
+            )
+            // }
+        }
+
+        shapes.push(vertex_shapes::rect(
+            (-0.05, -0.05, 0.1, 0.1).into(),
+            Color {
+                a: 1.,
+                r: 0.,
+                g: 1.,
+                b: 0.,
+            },
+        ));
+
+        let (vertices, indices) = shapes.into();
+
+        // println!("vertices: {:?}", &vertices);
+
+        let vertex_buffer = Buffer::from_iter(
+            self.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::VERTEX_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                ..Default::default()
+            },
+            vertices,
+        )
+        .unwrap();
+
+        let index_buffer = Buffer::from_iter(
+            self.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::INDEX_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                ..Default::default()
+            },
+            indices,
+        )
+        .unwrap();
 
         mod vs {
             vulkano_shaders::shader! {
@@ -224,9 +394,31 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
                 #version 450
 
                 layout(location = 0) in vec2 position;
+                layout(location = 1) out vec4 color;
+
+                layout(set = 0, binding = 0) uniform Global {
+                    mat3 transformation;
+                    vec2 view_port_size;
+                } global;
+
+                vec2 transform(vec2 p) {
+                    vec3 v = vec3(p, 1.0) * global.transformation;
+
+                    // return v.xy;
+                    // v.z = 1.;
+                    return vec2(
+                        v.x / v.z,
+                        v.y / v.z);
+                }
+
+                vec2 reorigin(vec2 p) {
+                    return ((p - global.view_port_size / 2) / global.view_port_size) * 2.;
+                }
 
                 void main() {
-                    gl_Position = vec4(position, 0.0, 1.0);
+                    gl_Position = vec4(reorigin(position), 0.0, 1.0);
+                    // gl_Position = vec4(reorigin(transform(position)), 0.0, 1.0);
+                    color = gl_Position;
                 }
             ",
             }
@@ -239,9 +431,10 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
                 #version 450
 
                 layout(location = 0) out vec4 f_color;
+                layout(location = 1) in vec4 color;
 
                 void main() {
-                    f_color = vec4(1.0, 0.0, 0.0, 1.0);
+                    f_color = color;
                 }
             ",
             }
@@ -263,6 +456,9 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
             },
         )
         .unwrap();
+
+        let render_output_buf = self.render_output_buf.clone().unwrap();
+        let render_output_image = self.render_output_image.clone().unwrap();
 
         let render_output_image_view = ImageView::new_default(render_output_image.clone()).unwrap();
 
@@ -286,7 +482,9 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
                 .entry_point("main")
                 .unwrap();
 
-            let vertex_input_state = MyVertex::per_vertex().definition(&vs).unwrap();
+            let vertex_input_state = Vertex::per_vertex()
+                .definition(&vs.info().input_interface)
+                .unwrap();
 
             let stages = [
                 PipelineShaderStageCreateInfo::new(vs),
@@ -300,6 +498,17 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
                     .unwrap(),
             )
             .unwrap();
+
+            // println!("descriptor_counts: {:?}" , layout.set_layouts().get(0).unwrap().descriptor_counts()) ;
+            assert!(
+                layout
+                    .set_layouts()
+                    .get(0)
+                    .unwrap()
+                    .descriptor_counts()
+                    .len()
+                    > 0
+            );
 
             let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
 
@@ -340,14 +549,47 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
 
         // Host-accessible buffer where the offscreen image's contents are copied to after rendering.
 
-
         let mut builder = AutoCommandBufferBuilder::primary(
-            command_buffer_allocator.clone(),
+            &command_buffer_allocator.clone(),
             self.queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
         )
         .unwrap();
 
+        let global_uniform_object = vs::Global {
+            transformation: glsl_convertions::matrix_to_mat3(transformation.as_f32()),
+            view_port_size: glsl_convertions::size_to_vec2(view_port_rect.size().as_f32()),
+        };
+
+        println!(
+            "global_uniform_object: {:?}, {:?}",
+            global_uniform_object.transformation, global_uniform_object.view_port_size
+        );
+
+        let global_uniform_buffer = Buffer::from_data(
+            self.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::STORAGE_BUFFER | BufferUsage::UNIFORM_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                    | MemoryTypeFilter::HOST_RANDOM_ACCESS,
+                ..Default::default()
+            },
+            global_uniform_object,
+        )
+        .unwrap();
+
+        let descriptor_set = PersistentDescriptorSet::new(
+            &self.descriptor_set_allocator,
+            pipeline.layout().set_layouts().get(0).unwrap().clone(),
+            [WriteDescriptorSet::buffer(0, global_uniform_buffer)],
+            [],
+        )
+        .unwrap();
+
+        let index_buffer_len = index_buffer.len();
         builder
             .begin_render_pass(
                 RenderPassBeginInfo {
@@ -363,9 +605,21 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
             .unwrap()
             .bind_pipeline_graphics(pipeline.clone())
             .unwrap()
-            .bind_vertex_buffers(0, self.vertex_buffer.clone())
+            .bind_descriptor_sets(
+                PipelineBindPoint::Graphics,
+                pipeline.layout().clone(),
+                0,
+                descriptor_set,
+            )
+            .unwrap()
+            .bind_vertex_buffers(0, vertex_buffer)
+            .unwrap()
+            .bind_index_buffer(index_buffer)
             .unwrap();
-        unsafe { builder.draw(self.vertex_buffer.len() as u32, 1, 0, 0) }.unwrap();
+
+        builder
+            .draw_indexed(index_buffer_len as u32, 1, 0, 0, 0)
+            .unwrap();
 
         builder.end_render_pass(Default::default()).unwrap();
 
@@ -394,22 +648,9 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
 
         assert_eq!(buffer.make_mut_bytes().len(), buffer_content.len());
 
+        // buffer.make_mut_bytes().clone_from_slice(&buffer_content);
         for i in 0..buffer.make_mut_bytes().len() {
             buffer.make_mut_bytes()[i] = buffer_content[i];
         }
-
-        // let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("triangle.png");
-        // let file = File::create(&path).unwrap();
-        // let w = &mut BufWriter::new(file);
-
-        // let mut encoder = png::Encoder::new(w, 1920, 1080);
-        // encoder.set_color(png::ColorType::Rgba);
-        // encoder.set_depth(png::BitDepth::Eight);
-        // let mut writer = encoder.write_header().unwrap();
-        // writer.write_image_data(&buffer_content).unwrap();
-
-        // if let Ok(path) = path.canonicalize() {
-        //     println!("Saved to {}", path.display());
-        // }
     }
 }
