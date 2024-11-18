@@ -8,8 +8,11 @@ use bugs_lib::time_point::{StaticTimePoint, TimePoint as _};
 use bugs_lib::utils::{pretty_duration, Color, Float};
 use clap::Parser;
 use rand::Rng;
-use render::{BrainRenderModel, Camera, ChunksDisplayMode, EnvironmentRenderModel};
-use slint::{CloseRequestResponse, ComponentHandle, PlatformError, Timer, TimerMode};
+use render::opengl::{OpenGlBrainRenderModel, OpenGlEnvironmentRenderModel};
+use render::sdl::{SdlBrainRenderModel, SdlEnvironmentRenderModel};
+use render::vulkan::{VulkanBrainRenderModel, VulkanEnvironmentRenderModel};
+use render::{BrainRenderer, Camera, ChunksDisplayMode, EnvironmentRenderer};
+use slint::{CloseRequestResponse, PlatformError, Timer, TimerMode};
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -57,8 +60,6 @@ pub const NUKE_RADIUS: NoNeg<Float> = noneg_float(200.);
 struct State {
     environment: SeededEnvironment<StaticTimePoint>,
     camera: Camera,
-    environment_render_model: RefCell<EnvironmentRenderModel>,
-    brain_render_model: RefCell<BrainRenderModel>,
     selected_bug_id: Option<usize>,
     time_speed: Float,
     pause: bool,
@@ -68,6 +69,7 @@ struct State {
     tool_action_point: Option<Point<Float>>,
     tool_action_active: bool,
     chunks_display_mode: ChunksDisplayMode,
+    do_render: bool,
 }
 
 #[derive(Parser)]
@@ -84,11 +86,21 @@ enum EnvPreset {
     Circle,
 }
 
+#[derive(clap::ValueEnum, Clone, Debug, PartialEq)]
+#[clap(rename_all = "kebab_case")]
+enum Renderer {
+    Sdl,
+    Vulkan,
+    OpenGl,
+}
+
 /// Generates simulation environment from one of builtin presets
 #[derive(Parser)]
 struct NewCommand {
     #[arg(short, long)]
     env_preset: EnvPreset,
+    #[arg(short, long)]
+    renderer: Renderer,
 }
 
 /// Loads simulation environment from json save file
@@ -96,10 +108,12 @@ struct NewCommand {
 struct LoadCommand {
     #[arg(short, long)]
     save_file: Option<PathBuf>,
+    #[arg(short, long, default_value = "sdl")]
+    renderer: Renderer,
 }
 
 pub fn main() -> Result<(), PlatformError> {
-    let (save_path, environment) = match Args::parse() {
+    let (save_path, environment, renderer) = match Args::parse() {
         Args::New(command) => {
             let exe_path = std::env::current_exe().unwrap();
             let exe_dir = exe_path.parent().unwrap();
@@ -117,6 +131,7 @@ pub fn main() -> Result<(), PlatformError> {
                         rand::thread_rng().gen(),
                     ),
                 },
+                command.renderer,
             )
         }
         Args::Load(command) => {
@@ -128,9 +143,14 @@ pub fn main() -> Result<(), PlatformError> {
             (
                 save_path.clone(),
                 serde_json::from_str(&std::fs::read_to_string(&save_path).unwrap()).unwrap(),
+                command.renderer,
             )
         }
     };
+
+    if renderer == Renderer::OpenGl {
+        std::env::set_var("SLINT_BACKEND", "GL");
+    }
 
     println!(
         "save_path: {:?}, (exist: {})",
@@ -142,8 +162,6 @@ pub fn main() -> Result<(), PlatformError> {
         environment,
         selected_bug_id: None,
         camera: Default::default(),
-        environment_render_model: Default::default(),
-        brain_render_model: Default::default(),
         time_speed: 1.,
         pause: true,
         selected_node: None,
@@ -152,6 +170,7 @@ pub fn main() -> Result<(), PlatformError> {
         tool_action_point: None,
         tool_action_active: false,
         chunks_display_mode: ChunksDisplayMode::None,
+        do_render: true,
     }));
 
     let (ctrl_c_tx, ctrl_c_rx) = std::sync::mpsc::channel();
@@ -296,6 +315,8 @@ pub fn main() -> Result<(), PlatformError> {
                 return velocity * angle_delta / default_deltas_per_step;
             };
 
+            // let delta_y = delta_y / 100.;
+
             if control {
                 // zoom
                 state.camera.concat_scale_centered(
@@ -304,6 +325,8 @@ pub fn main() -> Result<(), PlatformError> {
                     position,
                 );
             } else if shift {
+                // let delta_y = delta_y * 100.;
+
                 // scroll horizontally
                 state.camera.add_translation(
                     (angle_delta_to_translation_delta(delta_y as Float), 0.).into(),
@@ -333,6 +356,7 @@ pub fn main() -> Result<(), PlatformError> {
 
             let f1 = [0xEF, 0x9C, 0x84];
             let f2 = [0xEF, 0x9C, 0x85];
+            let f3 = [0xEF, 0x9C, 0x86];
 
             if let Ok(lvl) = text.parse::<u32>() {
                 state.time_speed = (2_u32).pow(lvl) as f64;
@@ -348,6 +372,9 @@ pub fn main() -> Result<(), PlatformError> {
                 true
             } else if text.as_str().as_bytes() == f2 {
                 state.environment.collect_unused_chunks();
+                true
+            } else if text.as_str().as_bytes() == f3 {
+                state.do_render = !state.do_render;
                 true
             } else if text == "q" {
                 std::fs::write(
@@ -387,180 +414,289 @@ pub fn main() -> Result<(), PlatformError> {
 
     let mut prev_render_instant = Instant::now();
 
+    let mut environment_render_model: Option<RefCell<EnvironmentRenderer<StaticTimePoint>>> = None;
+    let mut brain_render_model: Option<RefCell<BrainRenderer>> = None;
+
     let render_timer = Timer::default();
 
     {
-        #[cfg(not(debug_assertions))]
-        let render_interval = Duration::from_millis(1000 / 30);
-        #[cfg(debug_assertions)]
-        let render_interval = Duration::from_millis(2000);
-
         let weak_state = Rc::downgrade(&state);
         let weak_window = main_window.as_weak();
         let save_path = save_path.clone();
-        render_timer.start(TimerMode::Repeated, render_interval, move || {
-            if let Some(window) = weak_window.upgrade() {
-                let now = Instant::now();
-                let dt = now - prev_render_instant;
-                prev_render_instant = now;
 
-                let state = weak_state.upgrade().unwrap();
-                let state = state.borrow();
+        let mut render =
+            move |environment_render_model: &Option<
+                RefCell<EnvironmentRenderer<StaticTimePoint>>,
+            >,
+                  brain_render_model: &Option<RefCell<BrainRenderer>>| {
+                if let (Some(environment_render_model), Some(brain_render_model), Some(window)) = (
+                    environment_render_model,
+                    brain_render_model,
+                    weak_window.upgrade(),
+                ) {
+                    let now = Instant::now();
+                    let dt = now - prev_render_instant;
+                    prev_render_instant = now;
 
-                let mut environment_render_model = state.environment_render_model.borrow_mut();
+                    let mut environment_render_model = environment_render_model.borrow_mut();
+                    let mut brain_render_model = brain_render_model.borrow_mut();
 
-                let texture = environment_render_model.render(
-                    &state.environment,
-                    &state.camera,
-                    &state.selected_bug_id,
-                    state.active_tool,
-                    state.tool_action_point,
-                    state.tool_action_active,
-                    state.chunks_display_mode.clone(),
-                    window.get_requested_env_canvas_width() as u32,
-                    window.get_requested_env_canvas_height() as u32,
-                );
-                window.set_env_canvas(texture);
-                window.set_env_info(EnvInfo {
-                    now: pretty_duration(
-                        state
-                            .environment
-                            .now()
-                            .duration_since(state.environment.creation_time()),
-                    )
-                    .into(),
-                    pause: state.pause,
-                    time_speed: state.time_speed as f32,
-                    bugs_count: state.environment.bugs_count() as i32,
-                    food_count: state.environment.food_count() as i32,
-                });
-                window.set_fps(1. / dt.as_secs_f32());
-                window.set_tps(state.tps as f32);
+                    let state = weak_state.upgrade().unwrap();
+                    let state = state.borrow();
 
-                window.set_active_tool(state.active_tool.into());
-
-                if let Some(bug) = state
-                    .selected_bug_id
-                    .and_then(|id| state.environment.find_bug_by_id(id))
-                {
-                    window.set_selected_bug_info(BugInfo {
-                        genes: bug
-                            .chromosome()
-                            .genes
-                            .iter()
-                            .map(|x| *x as f32)
-                            .collect::<Vec<_>>()[..]
-                            .into(),
-                        age: bug.age(state.environment.now().clone()).unwrap() as f32,
-                        baby_charge_level: bug.baby_charge_level().unwrap() as f32,
-                        baby_charge_capacity: bug.baby_charge_capacity().unwrap() as f32,
-                        color: color_to_slint_rgba_color(bug.color()).into(),
-                        energy_level: bug.energy_level().unwrap() as f32,
-                        energy_capacity: bug.energy_capacity().unwrap() as f32,
-                        id: bug.id() as i32,
-                        rotation: bug.rotation().degrees() as f32,
-                        size: bug.size().unwrap() as f32,
-                        x: *bug.position().x() as f32,
-                        y: *bug.position().y() as f32,
-                        heat_capacity: bug.heat_capacity().unwrap() as f32,
-                        heat_level: bug.heat_level().unwrap() as f32,
-                        vision_range: bug.vision_range().unwrap() as f32,
-                        vision_arc: (bug.vision_half_arc().unwrap().degrees() * 2.) as f32,
-                    });
-
-                    if let Some(brain_log) = bug.last_brain_log() {
-                        let mut brain_render_model = state.brain_render_model.borrow_mut();
-
-                        window.set_brain_canvas(brain_render_model.render(
-                            bug.brain(),
-                            brain_log,
-                            state.selected_node,
-                            window.get_requested_brain_canvas_width() as u32,
-                            window.get_requested_brain_canvas_height() as u32,
-                        ));
-
-                        window.set_selected_bug_last_brain_log(BugBrainLog {
-                            input: BugBrainInput {
-                                color_of_nearest_bug: color_to_slint_rgba_color(
-                                    &brain_log
-                                        .input
-                                        .nearest_bug
-                                        .as_ref()
-                                        .map(|x| x.color.clone())
-                                        .unwrap_or(Color {
-                                            a: 0.,
-                                            r: 0.,
-                                            g: 0.,
-                                            b: 0.,
-                                        }),
-                                )
+                    if state.do_render {
+                        let texture = environment_render_model.render(
+                            (
+                                window.get_requested_env_canvas_width() as u32,
+                                window.get_requested_env_canvas_height() as u32,
+                            )
                                 .into(),
-                                direction_to_nearest_bug: brain_log
-                                    .input
-                                    .nearest_bug
-                                    .as_ref()
-                                    .map(|x| x.direction)
-                                    .unwrap_or(Angle::from_radians(0.))
-                                    .degrees()
-                                    as f32,
-                                direction_to_nearest_food: brain_log
-                                    .input
-                                    .nearest_food
-                                    .as_ref()
-                                    .map(|x| x.direction)
-                                    .unwrap_or(Angle::from_radians(0.))
-                                    .degrees()
-                                    as f32,
-                                rotation: brain_log.input.rotation.degrees() as f32,
-                                proximity_to_bug: brain_log
-                                    .input
-                                    .nearest_bug
-                                    .as_ref()
-                                    .map(|x| x.dst)
-                                    .unwrap_or(noneg_float(1.))
-                                    .unwrap()
-                                    as f32,
-                                proximity_to_food: brain_log
-                                    .input
-                                    .nearest_food
-                                    .as_ref()
-                                    .map(|x| x.dst)
-                                    .unwrap_or(noneg_float(1.))
-                                    .unwrap()
-                                    as f32,
-                            },
-                            output: BugBrainOutput {
-                                baby_charging_rate: brain_log.output.baby_charging_rate.unwrap()
-                                    as f32,
-                                desired_rotation: (bug.rotation()
-                                    + brain_log.output.relative_desired_rotation)
-                                    .degrees()
-                                    as f32,
-                                rotation_velocity: brain_log
-                                    .output
-                                    .rotation_velocity
-                                    .unwrap()
-                                    .degrees()
-                                    as f32,
-                                velocity: brain_log.output.velocity as f32,
-                            },
+                            &state.environment,
+                            &state.camera,
+                            &state.selected_bug_id,
+                            state.active_tool,
+                            state.tool_action_point,
+                            state.tool_action_active,
+                            state.chunks_display_mode.clone(),
+                        );
+                        window.set_env_canvas(texture);
+                    }
+                    window.set_env_info(EnvInfo {
+                        now: pretty_duration(
+                            state
+                                .environment
+                                .now()
+                                .duration_since(state.environment.creation_time()),
+                        )
+                        .into(),
+                        pause: state.pause,
+                        time_speed: state.time_speed as f32,
+                        bugs_count: state.environment.bugs_count() as i32,
+                        food_count: state.environment.food_count() as i32,
+                    });
+                    window.set_fps(1. / dt.as_secs_f32());
+                    window.set_tps(state.tps as f32);
+
+                    window.set_active_tool(state.active_tool.into());
+
+                    if let Some(bug) = state
+                        .selected_bug_id
+                        .and_then(|id| state.environment.find_bug_by_id(id))
+                    {
+                        window.set_selected_bug_info(BugInfo {
+                            genes: bug
+                                .chromosome()
+                                .genes
+                                .iter()
+                                .map(|x| *x as f32)
+                                .collect::<Vec<_>>()[..]
+                                .into(),
+                            age: bug.age(state.environment.now().clone()).unwrap() as f32,
+                            baby_charge_level: bug.baby_charge_level().unwrap() as f32,
+                            baby_charge_capacity: bug.baby_charge_capacity().unwrap() as f32,
+                            color: color_to_slint_rgba_color(bug.color()).into(),
+                            energy_level: bug.energy_level().unwrap() as f32,
+                            energy_capacity: bug.energy_capacity().unwrap() as f32,
+                            id: bug.id() as i32,
+                            rotation: bug.rotation().degrees() as f32,
+                            size: bug.size().unwrap() as f32,
+                            x: *bug.position().x() as f32,
+                            y: *bug.position().y() as f32,
+                            heat_capacity: bug.heat_capacity().unwrap() as f32,
+                            heat_level: bug.heat_level().unwrap() as f32,
+                            vision_range: bug.vision_range().unwrap() as f32,
+                            vision_arc: (bug.vision_half_arc().unwrap().degrees() * 2.) as f32,
                         });
+
+                        if state.do_render {
+                            if let Some(brain_log) = bug.last_brain_log() {
+                                window.set_brain_canvas(brain_render_model.render(
+                                    bug.brain(),
+                                    brain_log,
+                                    state.selected_node,
+                                    window.get_requested_brain_canvas_width() as u32,
+                                    window.get_requested_brain_canvas_height() as u32,
+                                ));
+
+                                window.set_selected_bug_last_brain_log(BugBrainLog {
+                                    input: BugBrainInput {
+                                        color_of_nearest_bug: color_to_slint_rgba_color(
+                                            &brain_log
+                                                .input
+                                                .nearest_bug
+                                                .as_ref()
+                                                .map(|x| x.color.clone())
+                                                .unwrap_or(Color {
+                                                    a: 0.,
+                                                    r: 0.,
+                                                    g: 0.,
+                                                    b: 0.,
+                                                }),
+                                        )
+                                        .into(),
+                                        direction_to_nearest_bug: brain_log
+                                            .input
+                                            .nearest_bug
+                                            .as_ref()
+                                            .map(|x| x.direction)
+                                            .unwrap_or(Angle::from_radians(0.))
+                                            .degrees()
+                                            as f32,
+                                        direction_to_nearest_food: brain_log
+                                            .input
+                                            .nearest_food
+                                            .as_ref()
+                                            .map(|x| x.direction)
+                                            .unwrap_or(Angle::from_radians(0.))
+                                            .degrees()
+                                            as f32,
+                                        rotation: brain_log.input.rotation.degrees() as f32,
+                                        proximity_to_bug: brain_log
+                                            .input
+                                            .nearest_bug
+                                            .as_ref()
+                                            .map(|x| x.dst)
+                                            .unwrap_or(noneg_float(1.))
+                                            .unwrap()
+                                            as f32,
+                                        proximity_to_food: brain_log
+                                            .input
+                                            .nearest_food
+                                            .as_ref()
+                                            .map(|x| x.dst)
+                                            .unwrap_or(noneg_float(1.))
+                                            .unwrap()
+                                            as f32,
+                                    },
+                                    output: BugBrainOutput {
+                                        baby_charging_rate: brain_log
+                                            .output
+                                            .baby_charging_rate
+                                            .unwrap()
+                                            as f32,
+                                        desired_rotation: (bug.rotation()
+                                            + brain_log.output.relative_desired_rotation)
+                                            .degrees()
+                                            as f32,
+                                        rotation_velocity: brain_log
+                                            .output
+                                            .rotation_velocity
+                                            .unwrap()
+                                            .degrees()
+                                            as f32,
+                                        velocity: brain_log.output.velocity as f32,
+                                    },
+                                });
+                            }
+                        }
+                    }
+
+                    window.window().request_redraw();
+
+                    if let Ok(_) = ctrl_c_rx.try_recv() {
+                        println!("\nSaving into: {:?}...", &save_path);
+                        std::fs::write(
+                            &save_path,
+                            serde_json::to_string_pretty(&state.environment).unwrap(),
+                        )
+                        .unwrap();
+                        window.window().hide().unwrap();
                     }
                 }
+            };
 
-                window.window().request_redraw();
+        let use_set_rendering_notifier = match renderer {
+            Renderer::Sdl => false,
+            Renderer::Vulkan => false,
+            Renderer::OpenGl => true,
+        };
 
-                if let Ok(_) = ctrl_c_rx.try_recv() {
-                    println!("\nSaving into: {:?}...", &save_path);
-                    std::fs::write(
-                        &save_path,
-                        serde_json::to_string_pretty(&state.environment).unwrap(),
-                    )
-                    .unwrap();
-                    window.window().hide().unwrap();
+        if use_set_rendering_notifier {
+            main_window
+                .window()
+                .set_rendering_notifier(move |state, graphics_api| {
+                    // eprintln!("rendering state {:#?}", state);
+
+                    match state {
+                        slint::RenderingState::RenderingSetup => {
+                            let context = match graphics_api {
+                                slint::GraphicsAPI::NativeOpenGL { get_proc_address } => unsafe {
+                                    glow::Context::from_loader_function_cstr(|s| {
+                                        get_proc_address(s)
+                                    })
+                                },
+                                slint::GraphicsAPI::WebGL {
+                                    canvas_element_id,
+                                    context_type,
+                                } => todo!(),
+                                _ => todo!(),
+                            };
+
+                            environment_render_model = Some(match renderer {
+                                Renderer::Sdl => RefCell::new(EnvironmentRenderer::new(
+                                    SdlEnvironmentRenderModel::default(),
+                                )),
+                                Renderer::Vulkan => RefCell::new(EnvironmentRenderer::new(
+                                    VulkanEnvironmentRenderModel::default(),
+                                )),
+                                Renderer::OpenGl => RefCell::new(EnvironmentRenderer::new(
+                                    OpenGlEnvironmentRenderModel::new(context),
+                                )),
+                            });
+                            brain_render_model = Some(match renderer {
+                                Renderer::Sdl => {
+                                    RefCell::new(BrainRenderer::new(SdlBrainRenderModel::default()))
+                                }
+                                Renderer::Vulkan => RefCell::new(BrainRenderer::new(
+                                    VulkanBrainRenderModel::default(),
+                                )),
+                                Renderer::OpenGl => RefCell::new(BrainRenderer::new(
+                                    OpenGlBrainRenderModel::default(),
+                                )),
+                            });
+                        }
+                        slint::RenderingState::BeforeRendering => {
+                            render(&environment_render_model, &brain_render_model)
+                        }
+                        slint::RenderingState::AfterRendering => {}
+                        slint::RenderingState::RenderingTeardown => {
+                            drop(environment_render_model.take());
+                            drop(brain_render_model.take());
+                        }
+                        _ => {}
+                    }
+                })
+                .expect("Unable to set rendering notifier");
+        } else {
+            environment_render_model = Some(match renderer {
+                Renderer::Sdl => RefCell::new(EnvironmentRenderer::new(
+                    SdlEnvironmentRenderModel::default(),
+                )),
+                Renderer::Vulkan => RefCell::new(EnvironmentRenderer::new(
+                    VulkanEnvironmentRenderModel::default(),
+                )),
+                Renderer::OpenGl => todo!(),
+            });
+            brain_render_model = Some(match renderer {
+                Renderer::Sdl => {
+                    RefCell::new(BrainRenderer::new(SdlBrainRenderModel::default()))
                 }
-            }
-        });
+                Renderer::Vulkan => RefCell::new(BrainRenderer::new(
+                    VulkanBrainRenderModel::default(),
+                )),
+                Renderer::OpenGl => RefCell::new(BrainRenderer::new(
+                    OpenGlBrainRenderModel::default(),
+                )),
+            });
+            let render_interval = match renderer {
+                Renderer::Sdl => Duration::from_millis(1000 / 30),
+                Renderer::Vulkan => Duration::from_millis(1000 / 60),
+                Renderer::OpenGl => Duration::from_millis(1000 / 60),
+            };
+            render_timer.start(TimerMode::Repeated, render_interval, move || {
+                render(&environment_render_model, &brain_render_model)
+            });
+        }
     }
 
     {

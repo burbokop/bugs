@@ -20,6 +20,53 @@ pub struct Color {
     pub b: Float,
 }
 
+impl Color {
+    pub fn with_a(self, a: Float) -> Self {
+        Self {
+            a,
+            r: self.r,
+            g: self.g,
+            b: self.b,
+        }
+    }
+    pub fn with_r(self, r: Float) -> Self {
+        todo!()
+    }
+    pub fn with_g(self, g: Float) -> Self {
+        todo!()
+    }
+    pub fn with_b(self, b: Float) -> Self {
+        todo!()
+    }
+
+    pub fn map_a<F: FnOnce(Float) -> Float>(self, f: F) -> Self {
+        Self {
+            a: f(self.a),
+            r: self.r,
+            g: self.g,
+            b: self.b,
+        }
+    }
+    pub fn map_r<F: FnOnce(Float) -> Float>(self, f: F) -> Self {
+        todo!()
+    }
+    pub fn map_g<F: FnOnce(Float) -> Float>(self, f: F) -> Self {
+        todo!()
+    }
+    pub fn map_b<F: FnOnce(Float) -> Float>(self, f: F) -> Self {
+        todo!()
+    }
+
+    pub fn from_rgb24(r: u8, g: u8, b: u8) -> Self {
+        Self {
+            a: 1.,
+            r: r as Float / 256.,
+            g: g as Float / 256.,
+            b: b as Float / 256.,
+        }
+    }
+}
+
 pub(crate) fn normalize<const SIZE: usize>(v: [Float; SIZE]) -> [Float; SIZE] {
     let max = v.iter().cloned().reduce(Float::max).unwrap();
     v.map(|x| x / max)

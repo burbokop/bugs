@@ -171,13 +171,6 @@ impl<T> Rect<T> {
             .into()
     }
 
-    pub(crate) fn size(&self) -> Size<T>
-    where
-        T: Clone,
-    {
-        (self.w.clone(), self.h.clone()).into()
-    }
-
     pub(crate) fn x_range(&self) -> Range<T>
     where
         T: Clone + Add<Output = T>,
@@ -279,6 +272,10 @@ impl<T> Rect<T> {
             self.h + y * T::two(),
         )
             .into()
+    }
+
+    pub fn size(self) -> Size<T> {
+        (self.w, self.h).into()
     }
 }
 
