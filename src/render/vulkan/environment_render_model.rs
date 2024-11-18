@@ -3,7 +3,6 @@ use bugs_lib::{
     math::{map_into_range, Point, Rect, Size},
     utils::{Color, Float},
 };
-use slint::{Rgba8Pixel, SharedPixelBuffer};
 
 use crate::{
     render::{Camera, ChunksDisplayMode, EnvironmentRenderModel},
@@ -207,6 +206,7 @@ pub struct VulkanEnvironmentRenderModel {
     descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
     render_output_image: Option<Arc<Image>>,
     render_output_buf: Option<Subbuffer<[u8]>>,
+    view_port_size: Size<u32>,
 }
 
 impl Default for VulkanEnvironmentRenderModel {
@@ -286,15 +286,12 @@ impl Default for VulkanEnvironmentRenderModel {
             descriptor_set_allocator,
             render_output_buf: None,
             render_output_image: None,
+            view_port_size: (0, 0).into(),
         }
     }
 }
 
-// 2.8
-// 2.7
-// 14 N
-
-impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
+impl VulkanEnvironmentRenderModel {
     fn init(&mut self, view_port_size: Size<u32>) {
         let format = self.format;
         self.render_output_image = Some(
@@ -328,10 +325,11 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
             .unwrap(),
         );
     }
-
+}
+impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
     fn render(
-        &self,
-        buffer: &mut SharedPixelBuffer<Rgba8Pixel>,
+        &mut self,
+        view_port_size: Size<u32>,
         environment: &Environment<T>,
         camera: &Camera,
         selected_bug_id: &Option<usize>,
@@ -339,16 +337,22 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
         tool_action_point: Option<Point<Float>>,
         tool_action_active: bool,
         chunks_display_mode: ChunksDisplayMode,
-    ) {
-        assert_eq!(
-            buffer.as_bytes().len(),
-            buffer.width() as usize * buffer.height() as usize * 4
-        );
-        let buffer_size: Size<u32> = (buffer.width(), buffer.height()).into();
+    ) -> slint::Image {
+        if *self.view_port_size.w() != *view_port_size.w()
+            || *self.view_port_size.h() != *view_port_size.h()
+        {
+            self.init(view_port_size);
+            self.view_port_size = view_port_size
+        }
 
         let transformation = camera.transformation();
-        let view_port_rect: Rect<_> =
-            (0., 0., *buffer_size.w() as Float, *buffer_size.h() as Float).into();
+        let view_port_rect: Rect<_> = (
+            0.,
+            0.,
+            *view_port_size.w() as Float,
+            *view_port_size.h() as Float,
+        )
+            .into();
 
         let mut shapes: VertexShapeVec = Default::default();
 
@@ -498,7 +502,7 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
                     viewport_state: Some(ViewportState {
                         viewports: [Viewport {
                             offset: [0.0, 0.0],
-                            extent: [*buffer_size.w() as f32, *buffer_size.h() as f32],
+                            extent: [*view_port_size.w() as f32, *view_port_size.h() as f32],
                             depth_range: 0.0..=1.0,
                         }]
                         .into_iter()
@@ -617,7 +621,15 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
             .unwrap();
 
         let buffer_content = render_output_buf.read().unwrap();
-        assert_eq!(buffer.make_mut_bytes().len(), buffer_content.len());
-        buffer.make_mut_bytes().clone_from_slice(&buffer_content);
+
+        assert_eq!(
+            buffer_content.len(),
+            *view_port_size.w() as usize * *view_port_size.h() as usize * 4
+        );
+        slint::Image::from_rgba8(slint::SharedPixelBuffer::clone_from_slice(
+            &buffer_content,
+            *view_port_size.w(),
+            *view_port_size.h(),
+        ))
     }
 }

@@ -133,20 +133,22 @@ fn draw_chunk_simplified(
     }
 }
 
-pub struct SdlEnvironmentRenderModel {}
+pub struct SdlEnvironmentRenderModel {
+    buffer: SharedPixelBuffer<Rgba8Pixel>,
+}
 
 impl Default for SdlEnvironmentRenderModel {
     fn default() -> Self {
-        Self {}
+        Self {
+            buffer: SharedPixelBuffer::new(0, 0),
+        }
     }
 }
 
 impl<T> EnvironmentRenderModel<T> for SdlEnvironmentRenderModel {
-    fn init(&mut self, _: Size<u32>) {}
-
     fn render(
-        &self,
-        buffer: &mut SharedPixelBuffer<Rgba8Pixel>,
+        &mut self,
+        view_port_size: Size<u32>,
         environment: &Environment<T>,
         camera: &Camera,
         selected_bug_id: &Option<usize>,
@@ -154,19 +156,23 @@ impl<T> EnvironmentRenderModel<T> for SdlEnvironmentRenderModel {
         tool_action_point: Option<Point<Float>>,
         tool_action_active: bool,
         chunks_display_mode: ChunksDisplayMode,
-    ) {
+    ) -> slint::Image {
+        if self.buffer.width() != *view_port_size.w() || self.buffer.height() != *view_port_size.h()
+        {
+            self.buffer = SharedPixelBuffer::new(*view_port_size.w(), *view_port_size.h());
+        }
+
         assert_eq!(
-            buffer.as_bytes().len(),
-            buffer.width() as usize * buffer.height() as usize * 4
+            self.buffer.as_bytes().len(),
+            self.buffer.width() as usize * self.buffer.height() as usize * 4
         );
-        let buffer_size: Size<u32> = (buffer.width(), buffer.height()).into();
 
         {
             let surface = Surface::from_data(
-                buffer.make_mut_bytes(),
-                *buffer_size.w(),
-                *buffer_size.h(),
-                *buffer_size.w() * 4,
+                self.buffer.make_mut_bytes(),
+                *view_port_size.w(),
+                *view_port_size.h(),
+                *view_port_size.w() * 4,
                 sdl2::pixels::PixelFormatEnum::RGBA32,
             )
             .unwrap();
@@ -221,8 +227,13 @@ impl<T> EnvironmentRenderModel<T> for SdlEnvironmentRenderModel {
                 }
             }
 
-            let view_port_rect: Rect<_> =
-                (0., 0., *buffer_size.w() as Float, *buffer_size.h() as Float).into();
+            let view_port_rect: Rect<_> = (
+                0.,
+                0.,
+                *view_port_size.w() as Float,
+                *view_port_size.h() as Float,
+            )
+                .into();
 
             if scale < 0.05 && chunks_display_mode == ChunksDisplayMode::None {
                 for (index, ocupants_count) in environment.food_chunks() {
@@ -661,5 +672,6 @@ impl<T> EnvironmentRenderModel<T> for SdlEnvironmentRenderModel {
 
             canvas.present();
         }
+        slint::Image::from_rgba8(self.buffer.clone())
     }
 }
