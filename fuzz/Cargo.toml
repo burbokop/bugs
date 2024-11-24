@@ -12,7 +12,7 @@ libfuzzer-sys = "0.4.8"
 rand = "0.8.5"
 rand_seeder = "0.3.0"
 rand_pcg = "0.3.1"
-chromosome = "0.1.0"
+chromosome = "0.2.0"
 memory-stats = "1.0.0"
 
 [dependencies.bugs-lib]
