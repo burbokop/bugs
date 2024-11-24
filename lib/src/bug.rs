@@ -12,7 +12,6 @@ const EAT_FOOD_MAX_PROXIMITY: NoNeg<Float> = noneg_float(20.);
 use crate::chunk::Position;
 use crate::{
     brain::{self, Brain, VerboseOutput},
-    chromo_utils::ExtendedChromosome as _,
     environment::{Environment, EnvironmentRequest, Food},
     math::{noneg_float, sign, AbsAsNoNeg as _, Angle, Complex, DeltaAngle, NoNeg},
     time_point::TimePoint,
@@ -451,7 +450,7 @@ impl<T> Bug<T> {
         T: Clone,
     {
         EnvironmentRequest::GiveBirth {
-            chromosome: self.chromosome.mutated_ext(|_| 0.01..0.8, 0.01, rng),
+            chromosome: self.chromosome.clone().mutated(|_, _| 0.01..0.8, 0.01, rng),
             position: self.position,
             rotation: Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
             energy_level: self.baby_charge_capacity(),

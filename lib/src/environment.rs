@@ -8,7 +8,6 @@ use std::{
 
 use crate::{
     bug::Bug,
-    chromo_utils::ExtendedChromosome as _,
     chunk::{ChunkedVec, Position, RawChunkIndex},
     food_source::{FoodSource, FoodSourceShape},
     math::{noneg_float, Angle, DeltaAngle, NoNeg, Point},
@@ -549,7 +548,7 @@ impl<T> Environment<T> {
             .filter_map(|x| x.try_borrow_mut().ok())
             .filter(|bug| (center - bug.position()).len() < radius.unwrap())
             .for_each(|mut bug| {
-                bug.chromosome_mut().mutate(|_| 0.001..1., 1., rng);
+                bug.chromosome_mut().mutate(|_, _| 0.001..1., 1., rng);
             });
     }
 
