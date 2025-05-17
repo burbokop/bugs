@@ -206,14 +206,16 @@ impl Brain {
     }
 
     pub(crate) fn proceed(&self, input: Input) -> Output {
-        self.net.proceed(&input.into(), normalizers::sigmoid).into()
+        self.net
+            .proceed(&input.into(), normalizers::fast_fake_sigmoid)
+            .into()
     }
 
     pub(crate) fn proceed_verbosely(&self, input: Input) -> VerboseOutput {
         let i = input.into();
         let (r0, r1) = self
             .net
-            .proceed_verbosely(&i, |x| normalizers::sigmoid(x) * 2. - 1.);
+            .proceed_verbosely(&i, normalizers::fast_fake_sigmoid);
         VerboseOutput {
             output: r1.clone().into(),
             activations: (i, *r0, *r1),
