@@ -69,10 +69,13 @@ export component MainWindow inherits Window {
 
     in property <float> fps;
     in property <float> tps;
+    in property <float> desired_fps;
+    in property <float> desired_tps;
     in property <EnvInfo> env-info;
     in property <BugInfo> selected-bug-info;
     in property <BugBrainLog> selected-bug-last-brain-log;
     in property <DisplayTool> active-tool;
+    in property <int> quality_deterioration;
 
     out property <int> requested-env-canvas-width: env-canvas.width / 1phx;
     out property <int> requested-env-canvas-height: env-canvas.height / 1phx;
@@ -94,7 +97,7 @@ export component MainWindow inherits Window {
     }
 
     title: "The Bugs";
-    preferred-width: 1000px;
+    preferred-width: 1100px;
     preferred-height: 600px;
 
     HorizontalBox {
@@ -360,6 +363,7 @@ export component MainWindow inherits Window {
 
         env-canvas := Image {
             colorize: touch.has-hover-changed(touch.has-hover) ? #00000000 : #00000000;
+            image-rendering: pixelated;
 
             touch := TouchArea {
                 pure callback has-hover-changed(bool) -> bool;
@@ -402,12 +406,17 @@ export component MainWindow inherits Window {
             VerticalBox {
                 x: 0;
                 y: 0;
+
                 Text {
-                    text: "fps: \{(root.fps * 10).round() / 10}";
+                    text: "fps: \{(root.fps * 10).round() / 10} of \{(root.desired_fps * 10).round() / 10}";
                 }
 
                 Text {
-                    text: "tps: \{(root.tps * 10).round() / 10}";
+                    text: "tps: \{(root.tps * 10).round() / 10} of \{(root.desired_tps * 10).round() / 10}";
+                }
+
+                Text {
+                    text: "qd: \{root.quality_deterioration}";
                 }
 
                 Empty {}
@@ -416,6 +425,7 @@ export component MainWindow inherits Window {
 
         brain-canvas := Image {
             width: 320px;
+            image-rendering: pixelated;
         }
     }
 
