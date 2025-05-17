@@ -3,7 +3,7 @@ use crate::{
     utils::Float,
 };
 use serde::{Deserialize, Serialize};
-use std::{marker::PhantomData, usize};
+use std::{collections::BTreeMap, marker::PhantomData, usize};
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Chunk<T> {
@@ -43,8 +43,8 @@ pub(crate) trait Position {
     fn position(&self) -> Point<Float>;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum ChunkType {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ChunkType {
     FromTopLeft,
     FromTopRight,
     FromBottomLeft,
@@ -101,6 +101,17 @@ impl ChunkType {
         }
     }
 
+    fn from_usize(i: usize) -> Self {
+        match i {
+            0 => ChunkType::FromTopLeft,
+            1 => ChunkType::FromTopRight,
+            2 => ChunkType::FromBottomLeft,
+            3 => ChunkType::FromBottomRight,
+            _ => panic!("Oops!"),
+        }
+    }
+
+    #[inline]
     pub fn values() -> [Self; 4] {
         [
             Self::FromTopLeft,
@@ -108,6 +119,16 @@ impl ChunkType {
             Self::FromBottomLeft,
             Self::FromBottomRight,
         ]
+    }
+
+    #[inline(always)]
+    fn next(self) -> Self {
+        match self {
+            Self::FromTopLeft => Self::FromTopRight,
+            Self::FromTopRight => Self::FromBottomLeft,
+            Self::FromBottomLeft => Self::FromBottomRight,
+            Self::FromBottomRight => Self::FromTopLeft,
+        }
     }
 }
 
@@ -121,27 +142,72 @@ pub(crate) struct ChunkedVec<T, const W: usize, const H: usize> {
 }
 
 impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
-    pub(crate) fn chunks(&self) -> Vec<(RawChunkIndex, usize)> {
-        let mut result: Vec<(RawChunkIndex, usize)> = Default::default();
-        for tp in ChunkType::values() {
-            let rows = tp.clone().part(self);
-            for y in 0..rows.len() {
-                let cols = &rows[y];
-                for x in 0..cols.len() {
-                    let items = &rows[y][x].items;
-                    result.push((
-                        ChunkIndex {
-                            tp: tp.clone(),
-                            x,
-                            y,
-                        }
-                        .into(),
-                        items.len(),
-                    ))
-                }
-            }
+    pub(crate) fn chunks<'a>(&'a self) -> impl Iterator<Item = (ChunkIndex, usize)> + 'a {
+        ChunkType::values()
+            .into_iter()
+            .map(|tp| {
+                tp.part(self)
+                    .iter()
+                    .enumerate()
+                    .map(move |(y, rows)| {
+                        rows.iter()
+                            .enumerate()
+                            .map(move |(x, chunk)| (ChunkIndex { tp, x, y }, chunk.items.len()))
+                    })
+                    .flatten()
+            })
+            .flatten()
+    }
+
+    pub(crate) fn chunks_in_area<'a>(
+        &'a self,
+        rect: Rect<Float>,
+    ) -> impl Iterator<Item = (ChunkIndex, usize)> + 'a {
+        let left_top: ChunkIndex = RawChunkIndex::from_position::<W, H>(rect.left_top()).into();
+        let left_bottom: ChunkIndex =
+            RawChunkIndex::from_position::<W, H>(rect.left_bottom()).into();
+        let right_bottom: ChunkIndex =
+            RawChunkIndex::from_position::<W, H>(rect.right_bottom()).into();
+        let right_top: ChunkIndex = RawChunkIndex::from_position::<W, H>(rect.right_top()).into();
+
+        let mut m: BTreeMap<ChunkType, Vec<ChunkIndex>> = Default::default();
+        for i in [left_top, left_bottom, right_bottom, right_top] {
+            m.entry(i.tp).or_insert(vec![]).push(i);
         }
-        result
+
+        m.into_iter()
+            .map(|(tp, v)| {
+                let rect = if v.len() == 1 {
+                    Rect::from_lrtb_unchecked(0, v[0].x, 0, v[0].y)
+                } else if v.len() == 2 {
+                    if v[0].x == v[1].x {
+                        Rect::from_lrtb(0, v[0].x, v[0].y, v[1].y)
+                    } else if v[0].y == v[1].y {
+                        Rect::from_lrtb(v[0].x, v[1].x, 0, v[0].y)
+                    } else {
+                        panic!("Oops!")
+                    }
+                } else if v.len() == 4 {
+                    Rect::aabb_from_points(v.into_iter().map(|v| v.point())).unwrap()
+                } else {
+                    panic!("Oops!")
+                };
+
+                (tp, rect)
+            })
+            .map(|(tp, rect)| {
+                let p = tp.part(self);
+                (rect.top().min(p.len())..(rect.bottom() + 1).min(p.len()))
+                    .map(move |y| {
+                        let p = &p[y];
+                        (rect.left().min(p.len())..(rect.right() + 1).min(p.len())).map(move |x| {
+                            let chunk = &p[x];
+                            (ChunkIndex { tp, x, y }, chunk.items.len())
+                        })
+                    })
+                    .flatten()
+            })
+            .flatten()
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -252,15 +318,14 @@ impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
     where
         P: FnMut(&T) -> bool,
     {
-        self.circular_traverse_iter(position, range)
-            .find_map(|chunk_index| {
-                self.get_chunk(chunk_index.clone()).and_then(|chunk| {
-                    chunk.index_of_impl(&mut predicate).map(|item_index| Index {
-                        chunk_index,
-                        item_index,
-                    })
+        Self::circular_traverse_iter(position, range).find_map(|chunk_index| {
+            self.get_chunk(chunk_index.clone()).and_then(|chunk| {
+                chunk.index_of_impl(&mut predicate).map(|item_index| Index {
+                    chunk_index,
+                    item_index,
                 })
             })
+        })
     }
 
     pub(crate) fn remove(&mut self, index: Index) -> T {
@@ -269,7 +334,6 @@ impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
     }
 
     pub(crate) fn circular_traverse_iter(
-        &self,
         position: Point<Float>,
         range: NoNeg<Float>,
     ) -> CircularTraverseIterator<T, W, H> {
@@ -312,7 +376,7 @@ impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
     where
         T: Position,
     {
-        self.circular_traverse_iter(position, range).find_map(
+        Self::circular_traverse_iter(position, range).find_map(
             |chunk_index| -> Option<(&T, NoNeg<Float>)> {
                 self.get_chunk(chunk_index).and_then(|chunk| {
                     chunk
@@ -342,7 +406,7 @@ impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
         B: Position,
         F: FnMut(&'a T) -> Option<B> + Clone,
     {
-        self.circular_traverse_iter(position, range).find_map(
+        Self::circular_traverse_iter(position, range).find_map(
             |chunk_index| -> Option<(B, NoNeg<Float>)> {
                 self.get_chunk(chunk_index).and_then(|chunk| {
                     chunk
@@ -441,13 +505,19 @@ impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ChunkIndex {
-    tp: ChunkType,
-    x: usize,
-    y: usize,
+pub struct ChunkIndex {
+    pub tp: ChunkType,
+    pub x: usize,
+    pub y: usize,
 }
 
-#[derive(Debug, Clone)]
+impl ChunkIndex {
+    pub fn point(&self) -> Point<usize> {
+        (self.x, self.y).into()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RawChunkIndex {
     x: isize,
     y: isize,

@@ -1,6 +1,6 @@
 #![deny(unused_imports)]
 
-use app_utils::{color_to_slint_rgba_f32_color};
+use app_utils::color_to_slint_rgba_f32_color;
 use bugs_lib::env_presets;
 use bugs_lib::environment::SeededEnvironment;
 use bugs_lib::math::{noneg_float, Angle, NoNeg, Point};
