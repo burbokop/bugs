@@ -17,6 +17,36 @@ impl<T> From<(T, T)> for Size<T> {
     }
 }
 
+impl<T> From<Size<T>> for (T, T) {
+    fn from(value: Size<T>) -> Self {
+        todo!()
+    }
+}
+
+impl<T> From<Size<T>> for [T; 2] {
+    fn from(value: Size<T>) -> Self {
+        [value.w, value.h]
+    }
+}
+
+impl Size<f32> {
+    pub fn as_f64(self) -> Size<f64> {
+        Size {
+            w: self.w as f64,
+            h: self.h as f64,
+        }
+    }
+}
+
+impl Size<f64> {
+    pub fn as_f32(self) -> Size<f32> {
+        Size {
+            w: self.w as f32,
+            h: self.h as f32,
+        }
+    }
+}
+
 impl<T> Size<T> {
     pub fn w(&self) -> &T {
         &self.w

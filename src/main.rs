@@ -1,6 +1,6 @@
 #![deny(unused_imports)]
 
-use app_utils::color_to_slint_rgba_color;
+use app_utils::{color_to_slint_rgba_f32_color};
 use bugs_lib::env_presets;
 use bugs_lib::environment::SeededEnvironment;
 use bugs_lib::math::{noneg_float, Angle, NoNeg, Point};
@@ -454,7 +454,7 @@ pub fn main() -> Result<(), PlatformError> {
                         age: bug.age(state.environment.now().clone()).unwrap() as f32,
                         baby_charge_level: bug.baby_charge_level().unwrap() as f32,
                         baby_charge_capacity: bug.baby_charge_capacity().unwrap() as f32,
-                        color: color_to_slint_rgba_color(bug.color()).into(),
+                        color: color_to_slint_rgba_f32_color(bug.color()).into(),
                         energy_level: bug.energy_level().unwrap() as f32,
                         energy_capacity: bug.energy_capacity().unwrap() as f32,
                         id: bug.id() as i32,
@@ -481,7 +481,7 @@ pub fn main() -> Result<(), PlatformError> {
 
                         window.set_selected_bug_last_brain_log(BugBrainLog {
                             input: BugBrainInput {
-                                color_of_nearest_bug: color_to_slint_rgba_color(
+                                color_of_nearest_bug: color_to_slint_rgba_f32_color(
                                     &brain_log
                                         .input
                                         .nearest_bug

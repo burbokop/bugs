@@ -83,6 +83,30 @@ impl<T> Rect<T> {
 
     pub fn from_lrtb(left: T, right: T, top: T, bottom: T) -> Self
     where
+        T: Sub<Output = T> + Clone + Ord,
+    {
+        let x = if left < right {
+            (left, right)
+        } else {
+            (right, left)
+        };
+
+        let y = if top < bottom {
+            (top, bottom)
+        } else {
+            (bottom, top)
+        };
+
+        Self {
+            x: x.0.clone(),
+            y: y.0.clone(),
+            w: x.1 - x.0,
+            h: y.1 - y.0,
+        }
+    }
+
+    pub fn from_lrtb_unchecked(left: T, right: T, top: T, bottom: T) -> Self
+    where
         T: Sub<Output = T> + Clone,
     {
         Self {
@@ -115,7 +139,7 @@ impl<T> Rect<T> {
                 result.3 = current.3
             }
         }
-        result.map(|a| Rect::from_lrtb(a.0, a.1, a.2, a.3))
+        result.map(|a| Rect::from_lrtb_unchecked(a.0, a.1, a.2, a.3))
     }
 
     pub fn aabb_from_points<I>(iter: I) -> Option<Rect<T>>
@@ -145,7 +169,7 @@ impl<T> Rect<T> {
                 result.3 = current.3
             }
         }
-        result.map(|a| Rect::from_lrtb(a.0, a.1, a.2, a.3))
+        result.map(|a| Rect::from_lrtb_unchecked(a.0, a.1, a.2, a.3))
     }
 
     pub fn from_center(center: Point<T>, size: Size<T>) -> Self
@@ -169,13 +193,6 @@ impl<T> Rect<T> {
             self.y.clone() + self.h.clone() / T::two(),
         )
             .into()
-    }
-
-    pub(crate) fn size(&self) -> Size<T>
-    where
-        T: Clone,
-    {
-        (self.w.clone(), self.h.clone()).into()
     }
 
     pub(crate) fn x_range(&self) -> Range<T>
@@ -279,6 +296,10 @@ impl<T> Rect<T> {
             self.h + y * T::two(),
         )
             .into()
+    }
+
+    pub fn size(self) -> Size<T> {
+        (self.w, self.h).into()
     }
 }
 
