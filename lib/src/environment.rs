@@ -8,9 +8,9 @@ use std::{
 
 use crate::{
     bug::Bug,
-    chunk::{ChunkedVec, Position, RawChunkIndex},
+    chunk::{ChunkIndex, ChunkedVec, Position, RawChunkIndex},
     food_source::{FoodSource, FoodSourceShape},
-    math::{noneg_float, Angle, DeltaAngle, NoNeg, Point},
+    math::{noneg_float, Angle, DeltaAngle, NoNeg, Point, Rect},
     range::Range,
     time_point::TimePoint,
     utils::Float,
@@ -218,11 +218,14 @@ pub(crate) enum EnvironmentRequest {
     PlaceFood(FoodCreateInfo),
 }
 
+type FoodChunkedVec = ChunkedVec<Food, 256, 256>;
+type BugsChunkedVec<T> = ChunkedVec<Rc<RefCell<Bug<T>>>, 256, 256>;
+
 #[derive(Serialize, Deserialize)]
 pub struct Environment<T> {
-    food: ChunkedVec<Food, 256, 256>,
+    food: FoodChunkedVec,
     food_sources: Vec<Rc<RefCell<FoodSource<T>>>>,
-    bugs: ChunkedVec<Rc<RefCell<Bug<T>>>, 256, 256>,
+    bugs: BugsChunkedVec<T>,
     creation_time: T,
     now: T,
     next_food_id: usize,
@@ -602,8 +605,15 @@ impl<T> Environment<T> {
             ))));
     }
 
-    pub fn food_chunks(&self) -> Vec<(RawChunkIndex, usize)> {
+    pub fn food_chunks<'a>(&'a self) -> impl Iterator<Item = (ChunkIndex, usize)> + 'a {
         self.food.chunks()
+    }
+
+    pub fn food_chunks_in_area<'a>(
+        &'a self,
+        rect: Rect<Float>,
+    ) -> impl Iterator<Item = (ChunkIndex, usize)> + 'a {
+        self.food.chunks_in_area(rect)
     }
 
     pub fn food_chunks_circular_traverse_iter(
@@ -611,14 +621,21 @@ impl<T> Environment<T> {
         position: Point<Float>,
         range: NoNeg<Float>,
     ) -> impl Iterator<Item = (isize, isize)> {
-        self.food.circular_traverse_iter(position, range).map(|a| {
+        FoodChunkedVec::circular_traverse_iter(position, range).map(|a| {
             let i: RawChunkIndex = a.into();
             (i.x(), i.y())
         })
     }
 
-    pub fn bug_chunks(&self) -> Vec<(RawChunkIndex, usize)> {
+    pub fn bug_chunks<'a>(&'a self) -> impl Iterator<Item = (ChunkIndex, usize)> + 'a {
         self.bugs.chunks()
+    }
+
+    pub fn bug_chunks_in_area<'a>(
+        &'a self,
+        rect: Rect<Float>,
+    ) -> impl Iterator<Item = (ChunkIndex, usize)> + 'a {
+        self.bugs.chunks_in_area(rect)
     }
 
     pub fn bug_chunks_circular_traverse_iter(
@@ -626,7 +643,7 @@ impl<T> Environment<T> {
         position: Point<Float>,
         range: NoNeg<Float>,
     ) -> impl Iterator<Item = (isize, isize)> {
-        self.bugs.circular_traverse_iter(position, range).map(|a| {
+        BugsChunkedVec::<T>::circular_traverse_iter(position, range).map(|a| {
             let i: RawChunkIndex = a.into();
             (i.x(), i.y())
         })

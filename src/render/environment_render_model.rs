@@ -4,6 +4,7 @@ use crate::{
     Tool, NUKE_RADIUS,
 };
 use bugs_lib::{
+    chunk::RawChunkIndex,
     environment::Environment,
     food_source::FoodSourceShape,
     math::{map_into_range, noneg_float, Complex, DeltaAngle, Point, Rect, Size},
@@ -249,6 +250,7 @@ impl EnvironmentRenderModel {
             match chunks_display_mode {
                 ChunksDisplayMode::FoodChunks => {
                     for (index, ocupants_count) in environment.food_chunks() {
+                        let index: RawChunkIndex = index.into();
                         let rect = &transformation
                             * &Rect::from((
                                 index.x() as Float * 256.,
@@ -269,6 +271,7 @@ impl EnvironmentRenderModel {
                 }
                 ChunksDisplayMode::BugChunks => {
                     for (index, ocupants_count) in environment.bug_chunks() {
+                        let index: RawChunkIndex = index.into();
                         let rect = &transformation
                             * &Rect::from((
                                 index.x() as Float * 256.,
@@ -289,6 +292,7 @@ impl EnvironmentRenderModel {
                 }
                 ChunksDisplayMode::Both => {
                     for (index, ocupants_count) in environment.food_chunks() {
+                        let index: RawChunkIndex = index.into();
                         let rect = &transformation
                             * &Rect::from((
                                 index.x() as Float * 256.,
@@ -307,6 +311,7 @@ impl EnvironmentRenderModel {
                         }
                     }
                     for (index, ocupants_count) in environment.bug_chunks() {
+                        let index: RawChunkIndex = index.into();
                         let rect = &transformation
                             * &Rect::from((
                                 index.x() as Float * 256.,
