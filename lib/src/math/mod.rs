@@ -1,5 +1,6 @@
 mod angle;
 mod complex;
+mod lerp;
 mod matrix;
 mod misc;
 mod noneg;
@@ -11,6 +12,7 @@ mod vector;
 
 pub use angle::*;
 pub use complex::*;
+pub use lerp::*;
 pub use matrix::*;
 pub use misc::*;
 pub use noneg::*;

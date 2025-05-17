@@ -1,4 +1,5 @@
 #![deny(unused_imports)]
+#![forbid(unsafe_code)]
 
 pub mod brain;
 pub mod bug;
