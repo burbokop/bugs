@@ -74,3 +74,16 @@ jobs:
       run: |
         rustup default nightly
         cargo fuzz build ${{steps.strings.outputs.cargo-options}}
+
+  check-format:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v4
+    - name: Rust format
+      run: cargo fmt --
+    - name: Suggest format changes
+      uses: reviewdog/action-suggester@v1
+      with:
+        tool_name: formatters
+        level: error
+        fail_level: any
