@@ -1,8 +1,5 @@
-use core::f32;
-
-use crate::range::RangeInclusive;
-
 use super::Angle;
+use crate::range::RangeInclusive;
 
 pub trait Sqr {
     type Output;

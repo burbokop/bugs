@@ -452,7 +452,7 @@ impl<T> Bug<T> {
         EnvironmentRequest::GiveBirth {
             chromosome: self.chromosome.clone().mutated(|_, _| 0.01..0.8, 0.01, rng),
             position: self.position,
-            rotation: Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
+            rotation: Angle::from_radians(rng.random_range(0. ..(PI * 2.))),
             energy_level: self.baby_charge_capacity(),
         }
     }

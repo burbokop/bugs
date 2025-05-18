@@ -1,5 +1,6 @@
 use std::{
     f64::consts::PI,
+    hint::black_box,
     ops::AddAssign,
     time::{Duration, SystemTime},
 };
@@ -10,7 +11,7 @@ use bugs_lib::{
     time_point::TimePoint,
 };
 use chromosome::Chromosome;
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use rand::Rng as _;
 use rand_pcg::Pcg64;
 use rand_seeder::Seeder;
@@ -37,7 +38,7 @@ impl AddAssign<Duration> for FakeTime {
 }
 
 fn find_nearest_food(c: &mut Criterion) {
-    let mut rng: Pcg64 = Seeder::from(&[0xff]).make_rng();
+    let mut rng: Pcg64 = Seeder::from(&[0xff]).into_rng();
     let the_beginning_of_times = FakeTime::default();
     {
         let environment = Environment::new(
@@ -47,7 +48,7 @@ fn find_nearest_food(c: &mut Criterion) {
             vec![BugCreateInfo {
                 chromosome: Chromosome::new_random(256, 1. ..1.01, &mut rng),
                 position: (0., 0.).into(),
-                rotation: Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
+                rotation: Angle::from_radians(rng.random_range(0. ..(PI * 2.))),
             }],
         );
 
@@ -65,7 +66,7 @@ fn find_nearest_food(c: &mut Criterion) {
             vec![BugCreateInfo {
                 chromosome: Chromosome::new_random(256, 1. ..1.01, &mut rng),
                 position: (0., 0.).into(),
-                rotation: Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
+                rotation: Angle::from_radians(rng.random_range(0. ..(PI * 2.))),
             }],
         );
 
@@ -89,7 +90,7 @@ fn find_nearest_food(c: &mut Criterion) {
             vec![BugCreateInfo {
                 chromosome: Chromosome::new_random(256, 1. ..1.01, &mut rng),
                 position: (0., 0.).into(),
-                rotation: Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
+                rotation: Angle::from_radians(rng.random_range(0. ..(PI * 2.))),
             }],
         );
 
@@ -102,7 +103,7 @@ fn find_nearest_food(c: &mut Criterion) {
 }
 
 fn find_nearest_bug(c: &mut Criterion) {
-    let mut rng: Pcg64 = Seeder::from(&[0xff]).make_rng();
+    let mut rng: Pcg64 = Seeder::from(&[0xff]).into_rng();
     let the_beginning_of_times = FakeTime::default();
 
     {
@@ -171,7 +172,7 @@ fn find_nearest_bug(c: &mut Criterion) {
 }
 
 fn transfer_energy_from_food_to_bug(c: &mut Criterion) {
-    let mut rng: Pcg64 = Seeder::from(&[0xff]).make_rng();
+    let mut rng: Pcg64 = Seeder::from(&[0xff]).into_rng();
     let the_beginning_of_times = FakeTime::default();
 
     {

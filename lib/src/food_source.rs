@@ -77,12 +77,12 @@ impl<T> FoodSource<T> {
                 FoodSourceShape::Circle { radius } => {
                     requests.push(EnvironmentRequest::PlaceFood(FoodCreateInfo {
                         position: Complex::from_polar(
-                            rng.gen_range(0. ..radius.unwrap()),
-                            Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
+                            rng.random_range(0. ..radius.unwrap()),
+                            Angle::from_radians(rng.random_range(0. ..(PI * 2.))),
                         )
                         .into_cartesian(),
                         energy: NoNeg::wrap(
-                            rng.gen_range(sample_range_from_range(self.energy_range)),
+                            rng.random_range(sample_range_from_range(self.energy_range)),
                         )
                         .unwrap(),
                     }));

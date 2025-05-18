@@ -21,7 +21,7 @@ impl<T> From<(T, T)> for Point<T> {
 
 impl<T> From<Point<T>> for (T, T) {
     fn from(value: Point<T>) -> Self {
-        todo!()
+        (value.x, value.y)
     }
 }
 

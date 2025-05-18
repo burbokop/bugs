@@ -19,7 +19,7 @@ impl<T> From<(T, T)> for Size<T> {
 
 impl<T> From<Size<T>> for (T, T) {
     fn from(value: Size<T>) -> Self {
-        todo!()
+        (value.w, value.h)
     }
 }
 

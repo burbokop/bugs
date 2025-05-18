@@ -21,7 +21,7 @@ use vulkano::{
         SubpassContents,
     },
     descriptor_set::{
-        allocator::StandardDescriptorSetAllocator, PersistentDescriptorSet, WriteDescriptorSet,
+        allocator::StandardDescriptorSetAllocator, DescriptorSet, WriteDescriptorSet,
     },
     device::{
         physical::{PhysicalDevice, PhysicalDeviceType},
@@ -480,9 +480,7 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
                     .entry_point("main")
                     .unwrap();
 
-                let vertex_input_state = Vertex::per_vertex()
-                    .definition(&vs.info().input_interface)
-                    .unwrap();
+                let vertex_input_state = Vertex::per_vertex().definition(&vs).unwrap();
 
                 let stages = [
                     PipelineShaderStageCreateInfo::new(vs),
@@ -547,7 +545,7 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
             // Host-accessible buffer where the offscreen image's contents are copied to after rendering.
 
             let mut builder = AutoCommandBufferBuilder::primary(
-                &command_buffer_allocator.clone(),
+                command_buffer_allocator,
                 self.queue.queue_family_index(),
                 CommandBufferUsage::OneTimeSubmit,
             )
@@ -573,8 +571,8 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
             )
             .unwrap();
 
-            let descriptor_set = PersistentDescriptorSet::new(
-                &self.descriptor_set_allocator,
+            let descriptor_set = DescriptorSet::new(
+                self.descriptor_set_allocator.clone(),
                 pipeline.layout().set_layouts().get(0).unwrap().clone(),
                 [WriteDescriptorSet::buffer(0, global_uniform_buffer)],
                 [],
@@ -611,9 +609,7 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
                 .bind_index_buffer(index_buffer)
                 .unwrap();
 
-            builder
-                .draw_indexed(index_buffer_len as u32, 1, 0, 0, 0)
-                .unwrap();
+            unsafe { builder.draw_indexed(index_buffer_len as u32, 1, 0, 0, 0) }.unwrap();
 
             builder.end_render_pass(Default::default()).unwrap();
 

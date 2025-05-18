@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use bugs_lib::{
     env_presets,
     environment::SeededEnvironment,
