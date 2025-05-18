@@ -28,7 +28,7 @@ pub(crate) struct FitIntoRangeError<T> {
 }
 
 impl<T> Display for FitIntoRangeError<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         todo!()
     }
 }
@@ -73,7 +73,7 @@ pub(crate) struct FitIntoRangeInclusiveError<T> {
 }
 
 impl<T> Display for FitIntoRangeInclusiveError<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         todo!()
     }
 }

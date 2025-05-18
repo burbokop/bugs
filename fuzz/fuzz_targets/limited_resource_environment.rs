@@ -42,7 +42,7 @@ impl AddAssign<Duration> for FakeTime {
 
 // Runs small simulation with limited resources until no bugs are left. Uses input data as seed for random generator.
 fuzz_target!(|data: &[u8]| {
-    let mut rng: Pcg64 = Seeder::from(data).make_rng();
+    let mut rng: Pcg64 = Seeder::from(data).into_rng();
     let the_beginning_of_times = FakeTime::default();
 
     let mut environment = Environment::new(
@@ -52,7 +52,7 @@ fuzz_target!(|data: &[u8]| {
         vec![BugCreateInfo {
             chromosome: Chromosome::new_random(256, (-1.)..1., &mut rng),
             position: (0., 0.).into(),
-            rotation: Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
+            rotation: Angle::from_radians(rng.random_range(0. ..(PI * 2.))),
         }],
     );
 

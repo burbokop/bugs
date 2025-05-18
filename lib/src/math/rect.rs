@@ -305,7 +305,8 @@ impl<T> Rect<T> {
 
 impl<T> From<(Point<T>, Size<T>)> for Rect<T> {
     fn from(value: (Point<T>, Size<T>)) -> Self {
-        todo!()
+        let ((x, y), (w, h)) = (value.0.into(), value.1.into());
+        Rect { x, y, w, h }
     }
 }
 

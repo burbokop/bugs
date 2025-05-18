@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use rand::distributions::uniform::{SampleRange, SampleUniform};
+use rand::distr::uniform::{SampleRange, SampleUniform};
 use serde::{Deserialize, Serialize};
 
 use crate::{math::NoNeg, range::Range};

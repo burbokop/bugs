@@ -16,8 +16,7 @@ use crate::{
     utils::Float,
 };
 use chromosome::Chromosome;
-use rand::{distributions::uniform::SampleRange, RngCore};
-use rand::{Rng, SeedableRng};
+use rand::{distr::uniform::SampleRange, rand_core, Rng, RngCore, SeedableRng};
 use rand_pcg::Pcg64;
 use serde::{Deserialize, Serialize};
 
@@ -67,8 +66,8 @@ impl Food {
     ) -> Self {
         Self::new(
             next_id,
-            (rng.gen_range(x_range), rng.gen_range(y_range)).into(),
-            NoNeg::wrap(rng.gen_range(e_range)).unwrap(),
+            (rng.random_range(x_range), rng.random_range(y_range)).into(),
+            NoNeg::wrap(rng.random_range(e_range)).unwrap(),
         )
     }
 
@@ -119,8 +118,8 @@ impl FoodCreateInfo {
         e_range: RR,
     ) -> Self {
         Self {
-            position: (rng.gen_range(x_range), rng.gen_range(y_range)).into(),
-            energy: NoNeg::wrap(rng.gen_range(e_range)).unwrap(),
+            position: (rng.random_range(x_range), rng.random_range(y_range)).into(),
+            energy: NoNeg::wrap(rng.random_range(e_range)).unwrap(),
         }
     }
 
@@ -157,8 +156,8 @@ impl BugCreateInfo {
     ) -> Self {
         Self {
             chromosome: Chromosome::new_random(256, g_range, rng),
-            position: (rng.gen_range(x_range), rng.gen_range(y_range)).into(),
-            rotation: Angle::from_radians(rng.gen_range(r_range)),
+            position: (rng.random_range(x_range), rng.random_range(y_range)).into(),
+            rotation: Angle::from_radians(rng.random_range(r_range)),
         }
     }
 
@@ -333,7 +332,7 @@ impl<T> Environment<T> {
                         .collect(),
                 },
                 bug_position,
-                Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
+                Angle::from_radians(rng.random_range(0. ..(PI * 2.))),
                 noneg_float(50.),
                 now.clone(),
             )
@@ -540,7 +539,7 @@ impl<T> Environment<T> {
         self.bugs.iter().filter_map(|x| x.try_borrow().ok())
     }
 
-    pub fn irradiate_area<R: RngCore>(
+    pub fn irradiate_area<R: rand_core::RngCore>(
         &mut self,
         center: Point<Float>,
         radius: NoNeg<Float>,
@@ -559,7 +558,7 @@ impl<T> Environment<T> {
         self.food.push(Food::new(
             &mut self.next_bug_id,
             center,
-            NoNeg::wrap(rng.gen_range((0.)..8.)).unwrap(),
+            NoNeg::wrap(rng.random_range((0.)..8.)).unwrap(),
         ));
     }
 
@@ -600,7 +599,7 @@ impl<T> Environment<T> {
                         .collect(),
                 },
                 center,
-                Angle::from_radians(rng.gen_range(0. ..(PI * 2.))),
+                Angle::from_radians(rng.random_range(0. ..(PI * 2.))),
                 self.now.clone(),
             ))));
     }

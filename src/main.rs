@@ -126,11 +126,11 @@ pub fn main() -> Result<(), PlatformError> {
                 match command.env_preset {
                     EnvPreset::NestedRects => env_presets::less_food_further_from_center(
                         StaticTimePoint::default(),
-                        rand::thread_rng().gen(),
+                        rand::rng().random(),
                     ),
                     EnvPreset::Circle => env_presets::one_big_circle(
                         StaticTimePoint::default(),
-                        rand::thread_rng().gen(),
+                        rand::rng().random(),
                     ),
                 },
                 command.renderer,
