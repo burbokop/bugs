@@ -8,20 +8,35 @@ use bugs_lib::{
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum ChunksDisplayMode {
+pub(crate) enum EnvironmentDisplayMode {
+    Optic,
+    Crc,
+    CrcChunks,
     FoodChunks,
     BugChunks,
-    Both,
-    None,
+    FoodAndBugChunks,
 }
 
-impl ChunksDisplayMode {
-    pub(crate) fn rotated(self) -> Self {
+impl EnvironmentDisplayMode {
+    pub(crate) fn prev(self) -> Self {
         match self {
-            ChunksDisplayMode::FoodChunks => ChunksDisplayMode::BugChunks,
-            ChunksDisplayMode::BugChunks => ChunksDisplayMode::Both,
-            ChunksDisplayMode::Both => ChunksDisplayMode::None,
-            ChunksDisplayMode::None => ChunksDisplayMode::FoodChunks,
+            EnvironmentDisplayMode::Optic => EnvironmentDisplayMode::FoodAndBugChunks,
+            EnvironmentDisplayMode::Crc => EnvironmentDisplayMode::Optic,
+            EnvironmentDisplayMode::CrcChunks => EnvironmentDisplayMode::Crc,
+            EnvironmentDisplayMode::FoodChunks => EnvironmentDisplayMode::CrcChunks,
+            EnvironmentDisplayMode::BugChunks => EnvironmentDisplayMode::FoodChunks,
+            EnvironmentDisplayMode::FoodAndBugChunks => EnvironmentDisplayMode::BugChunks,
+        }
+    }
+
+    pub(crate) fn next(self) -> Self {
+        match self {
+            EnvironmentDisplayMode::Optic => EnvironmentDisplayMode::Crc,
+            EnvironmentDisplayMode::Crc => EnvironmentDisplayMode::CrcChunks,
+            EnvironmentDisplayMode::CrcChunks => EnvironmentDisplayMode::FoodChunks,
+            EnvironmentDisplayMode::FoodChunks => EnvironmentDisplayMode::BugChunks,
+            EnvironmentDisplayMode::BugChunks => EnvironmentDisplayMode::FoodAndBugChunks,
+            EnvironmentDisplayMode::FoodAndBugChunks => EnvironmentDisplayMode::Optic,
         }
     }
 }
@@ -40,7 +55,7 @@ pub trait EnvironmentRenderModel<T> {
         active_tool: Tool,
         tool_action_point: Option<Point<Float>>,
         tool_action_active: bool,
-        chunks_display_mode: ChunksDisplayMode,
+        chunks_display_mode: EnvironmentDisplayMode,
     );
 }
 
@@ -65,7 +80,7 @@ impl<T> EnvironmentRenderer<T> {
         active_tool: Tool,
         tool_action_point: Option<Point<Float>>,
         tool_action_active: bool,
-        chunks_display_mode: ChunksDisplayMode,
+        environment_display_mode: EnvironmentDisplayMode,
         mut requested_canvas_width: u32,
         mut requested_canvas_height: u32,
         quality_deterioration: u32,
@@ -99,7 +114,7 @@ impl<T> EnvironmentRenderer<T> {
             active_tool,
             tool_action_point,
             tool_action_active,
-            chunks_display_mode,
+            environment_display_mode,
         );
 
         Image::from_rgba8(self.buffer.clone())

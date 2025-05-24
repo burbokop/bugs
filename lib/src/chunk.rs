@@ -3,7 +3,7 @@ use crate::{
     utils::Float,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, marker::PhantomData, usize};
+use std::{collections::BTreeMap, marker::PhantomData, ops::Deref, usize};
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Chunk<T> {
@@ -142,7 +142,7 @@ pub(crate) struct ChunkedVec<T, const W: usize, const H: usize> {
 }
 
 impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
-    pub(crate) fn chunks<'a>(&'a self) -> impl Iterator<Item = (ChunkIndex, usize)> + 'a {
+    pub(crate) fn chunks<'a>(&'a self) -> impl Iterator<Item = (ChunkIndex, &[T])> + 'a {
         ChunkType::values()
             .into_iter()
             .map(|tp| {
@@ -152,7 +152,7 @@ impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
                     .map(move |(y, rows)| {
                         rows.iter()
                             .enumerate()
-                            .map(move |(x, chunk)| (ChunkIndex { tp, x, y }, chunk.items.len()))
+                            .map(move |(x, chunk)| (ChunkIndex { tp, x, y }, chunk.items.deref()))
                     })
                     .flatten()
             })
@@ -162,7 +162,7 @@ impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
     pub(crate) fn chunks_in_area<'a>(
         &'a self,
         rect: Rect<Float>,
-    ) -> impl Iterator<Item = (ChunkIndex, usize)> + 'a {
+    ) -> impl Iterator<Item = (ChunkIndex, &[T])> + 'a {
         let left_top: ChunkIndex = RawChunkIndex::from_position::<W, H>(rect.left_top()).into();
         let left_bottom: ChunkIndex =
             RawChunkIndex::from_position::<W, H>(rect.left_bottom()).into();
@@ -202,7 +202,7 @@ impl<T, const W: usize, const H: usize> ChunkedVec<T, W, H> {
                         let p = &p[y];
                         (rect.left().min(p.len())..(rect.right() + 1).min(p.len())).map(move |x| {
                             let chunk = &p[x];
-                            (ChunkIndex { tp, x, y }, chunk.items.len())
+                            (ChunkIndex { tp, x, y }, chunk.items.deref())
                         })
                     })
                     .flatten()

@@ -604,14 +604,14 @@ impl<T> Environment<T> {
             ))));
     }
 
-    pub fn food_chunks<'a>(&'a self) -> impl Iterator<Item = (ChunkIndex, usize)> + 'a {
+    pub fn food_chunks<'a>(&'a self) -> impl Iterator<Item = (ChunkIndex, &'a [Food])> + 'a {
         self.food.chunks()
     }
 
     pub fn food_chunks_in_area<'a>(
         &'a self,
         rect: Rect<Float>,
-    ) -> impl Iterator<Item = (ChunkIndex, usize)> + 'a {
+    ) -> impl Iterator<Item = (ChunkIndex, &'a [Food])> + 'a {
         self.food.chunks_in_area(rect)
     }
 
@@ -626,14 +626,16 @@ impl<T> Environment<T> {
         })
     }
 
-    pub fn bug_chunks<'a>(&'a self) -> impl Iterator<Item = (ChunkIndex, usize)> + 'a {
+    pub fn bug_chunks<'a>(
+        &'a self,
+    ) -> impl Iterator<Item = (ChunkIndex, &'a [Rc<RefCell<Bug<T>>>])> + 'a {
         self.bugs.chunks()
     }
 
     pub fn bug_chunks_in_area<'a>(
         &'a self,
         rect: Rect<Float>,
-    ) -> impl Iterator<Item = (ChunkIndex, usize)> + 'a {
+    ) -> impl Iterator<Item = (ChunkIndex, &'a [Rc<RefCell<Bug<T>>>])> + 'a {
         self.bugs.chunks_in_area(rect)
     }
 

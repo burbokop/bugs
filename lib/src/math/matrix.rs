@@ -3,7 +3,7 @@ use std::{
     ops::{Add, Div, Mul, Neg, Not, Sub},
 };
 
-use super::{Complex, One, Point, Rect, Size, Vector, Zero};
+use super::{Complex, One, Point, Rect, Size, Two, Vector, Zero};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Matrix<T>([T; 9]);
@@ -132,11 +132,18 @@ impl<T> Matrix<T> {
     }
 
     pub fn scale_x(&self) -> &T {
-        return &self.0[indices::SCALE_X];
+        &self.0[indices::SCALE_X]
     }
 
     pub fn scale_y(&self) -> &T {
-        return &self.0[indices::SCALE_Y];
+        &self.0[indices::SCALE_Y]
+    }
+
+    pub fn average_scale(&self) -> T
+    where
+        T: Two + Clone + Add<Output = T> + Div<Output = T>,
+    {
+        (self.0[indices::SCALE_X].clone() + self.0[indices::SCALE_Y].clone()) / T::two()
     }
 
     pub fn translation(&self) -> Vector<T>

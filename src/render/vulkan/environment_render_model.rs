@@ -1,15 +1,16 @@
 use bugs_lib::{
     chunk::RawChunkIndex,
+    color::Color,
     environment::Environment,
     math::{map_into_range, Point, Rect, Size},
-    utils::{Color, Float},
+    utils::Float,
 };
 use slint::{Rgba8Pixel, SharedPixelBuffer};
 
 use crate::{
     app_utils::color_to_slint_rgba8_color,
-    render::{Camera, ChunksDisplayMode, EnvironmentRenderModel},
-    Tool,
+    render::{Camera, EnvironmentRenderModel},
+    EnvironmentDisplayMode, Tool,
 };
 
 use std::{default::Default, sync::Arc};
@@ -341,7 +342,7 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
         active_tool: Tool,
         tool_action_point: Option<Point<Float>>,
         tool_action_active: bool,
-        chunks_display_mode: ChunksDisplayMode,
+        environment_display_mode: EnvironmentDisplayMode,
     ) {
         let background_color = Color::from_rgb24(211, 250, 199);
 
@@ -356,9 +357,7 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
 
         let mut shapes: VertexShapeVec = Default::default();
 
-        for (index, ocupants_count) in
-            environment.food_chunks_in_area(view_port_rect_in_world_space)
-        {
+        for (index, ocupants) in environment.food_chunks_in_area(view_port_rect_in_world_space) {
             let index: RawChunkIndex = index.into();
             let rect = &Rect::from((
                 index.x() as Float * 256.,
@@ -372,14 +371,13 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
                 draw_chunk_simplified(
                     &mut shapes,
                     *rect,
-                    ocupants_count,
+                    ocupants.len(),
                     Color::from_rgb24(255, 110, 162),
                 );
             }
         }
 
-        for (index, ocupants_count) in environment.bug_chunks_in_area(view_port_rect_in_world_space)
-        {
+        for (index, ocupants) in environment.bug_chunks_in_area(view_port_rect_in_world_space) {
             let index: RawChunkIndex = index.into();
             let rect = &Rect::from((
                 index.x() as Float * 256.,
@@ -393,7 +391,7 @@ impl<T> EnvironmentRenderModel<T> for VulkanEnvironmentRenderModel {
                 draw_chunk_simplified(
                     &mut shapes,
                     *rect,
-                    ocupants_count,
+                    ocupants.len(),
                     Color::from_rgb24(0, 0, 255),
                 );
             }

@@ -10,12 +10,13 @@ use serde::{Deserialize, Serialize};
 const EAT_FOOD_MAX_PROXIMITY: NoNeg<Float> = noneg_float(20.);
 
 use crate::chunk::Position;
+use crate::color::Color;
 use crate::{
     brain::{self, Brain, VerboseOutput},
     environment::{Environment, EnvironmentRequest, Food},
     math::{noneg_float, sign, AbsAsNoNeg as _, Angle, Complex, DeltaAngle, NoNeg},
     time_point::TimePoint,
-    utils::{self, Color, Float},
+    utils::{self, Float},
 };
 
 use crate::math::Point;
@@ -55,6 +56,8 @@ pub struct BrainLog {
 pub struct Bug<T> {
     id: usize,
     chromosome: Chromosome<Float>,
+    #[serde(skip)]
+    crc: Float,
     #[serde(skip)]
     brain: Brain,
     #[serde(skip)]
@@ -116,10 +119,12 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Bug<T> {
 
         let val = TmpBug::deserialize(deserializer)?;
         let features = GeneticFeatures::from_chromosome(&val.chromosome);
+        let crc = val.chromosome.genes.iter().sum();
 
         Ok(Self {
             id: val.id,
             chromosome: val.chromosome,
+            crc,
             brain: features.brain,
             last_brain_log: None,
             position: val.position,
@@ -288,10 +293,11 @@ impl<T> Bug<T> {
         now: T,
     ) -> Result<Self, BugEnergyCapacityExceeded> {
         let features = GeneticFeatures::from_chromosome(&chromosome);
-
+        let crc = chromosome.genes.iter().sum();
         let result = Self {
             id: *next_id,
             chromosome,
+            crc,
             brain: features.brain,
             last_brain_log: None,
             position,
@@ -325,10 +331,12 @@ impl<T> Bug<T> {
         now: T,
     ) -> Self {
         let features = GeneticFeatures::from_chromosome(&chromosome);
+        let crc = chromosome.genes.iter().sum();
         *next_id += 1;
         Self {
             id: *next_id - 1,
             chromosome,
+            crc,
             brain: features.brain,
             last_brain_log: None,
             position,
@@ -361,13 +369,14 @@ impl<T> Bug<T> {
         let features = GeneticFeatures::from_chromosome(&chromosome);
         let energy_capacity = capacity::energy_capacity(features.size);
         let mut result: Vec<Self> = Default::default();
-
+        let crc = chromosome.genes.iter().sum();
         let n = (energy_level / energy_capacity).floor();
 
         for _ in 0..n.unwrap() as usize {
             result.push(Self {
                 id: *next_id,
                 chromosome: chromosome.clone(),
+                crc,
                 brain: features.brain.clone(),
                 last_brain_log: None,
                 position,
@@ -390,7 +399,8 @@ impl<T> Bug<T> {
 
         result.push(Self {
             id: *next_id,
-            chromosome: chromosome.clone(),
+            chromosome,
+            crc,
             brain: features.brain.clone(),
             last_brain_log: None,
             position,
@@ -470,6 +480,10 @@ impl<T> Bug<T> {
             delta_energy,
             energy_capacity,
         )
+    }
+
+    pub fn crc(&self) -> Float {
+        self.crc
     }
 
     pub(crate) fn proceed<R: RngCore>(
