@@ -4,6 +4,7 @@
 pub mod brain;
 pub mod bug;
 pub mod chunk;
+pub mod color;
 pub mod env_presets;
 pub mod environment;
 pub mod food_source;

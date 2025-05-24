@@ -1,7 +1,8 @@
 use crate::{
+    color::Color,
     math::{self, clamp_into_range, noneg_float, Angle, DeltaAngle, NoNeg},
     range::Range,
-    utils::{Color, Float, RequiredToBeInRange as _},
+    utils::{Float, RequiredToBeInRange as _},
 };
 use chromosome::Chromosome;
 use simple_neural_net::{normalizers, Arr, Layer as _, PerceptronLayer};

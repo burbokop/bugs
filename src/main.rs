@@ -1,16 +1,17 @@
 #![deny(unused_imports)]
 
 use app_utils::color_to_slint_rgba_f32_color;
+use bugs_lib::color::Color;
 use bugs_lib::env_presets;
 use bugs_lib::environment::SeededEnvironment;
 use bugs_lib::math::{noneg_float, Angle, LerpIntegrator, NoNeg, Point};
 use bugs_lib::time_point::{StaticTimePoint, TimePoint as _};
-use bugs_lib::utils::{pretty_duration, Color, Float};
+use bugs_lib::utils::{pretty_duration, Float};
 use clap::Parser;
 use rand::Rng;
 use render::sdl::{SdlBrainRenderModel, SdlEnvironmentRenderModel};
 use render::vulkan::{VulkanBrainRenderModel, VulkanEnvironmentRenderModel};
-use render::{BrainRenderer, Camera, ChunksDisplayMode, EnvironmentRenderer};
+use render::{BrainRenderer, Camera, EnvironmentDisplayMode, EnvironmentRenderer};
 use slint::{CloseRequestResponse, ComponentHandle, PlatformError, Timer, TimerMode};
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -69,7 +70,8 @@ struct State {
     active_tool: Tool,
     tool_action_point: Option<Point<Float>>,
     tool_action_active: bool,
-    chunks_display_mode: ChunksDisplayMode,
+    environment_display_mode: EnvironmentDisplayMode,
+    display_crc: bool,
     do_render: bool,
     desired_tps: Float,
     quality_deterioration: u32,
@@ -179,10 +181,11 @@ pub fn main() -> Result<(), PlatformError> {
         active_tool: Tool::None,
         tool_action_point: None,
         tool_action_active: false,
-        chunks_display_mode: ChunksDisplayMode::None,
+        environment_display_mode: EnvironmentDisplayMode::Optic,
         do_render: true,
         desired_tps: 30.,
         quality_deterioration: 1,
+        display_crc: false,
     }));
 
     let (ctrl_c_tx, ctrl_c_rx) = std::sync::mpsc::channel();
@@ -396,7 +399,7 @@ pub fn main() -> Result<(), PlatformError> {
                 }
                 true
             } else if text.as_str().as_bytes() == f1 {
-                state.chunks_display_mode = state.chunks_display_mode.clone().rotated();
+                state.environment_display_mode = state.environment_display_mode.clone().next();
                 true
             } else if text.as_str().as_bytes() == f2 {
                 state.environment.collect_unused_chunks();
@@ -484,7 +487,7 @@ pub fn main() -> Result<(), PlatformError> {
                         state.active_tool,
                         state.tool_action_point,
                         state.tool_action_active,
-                        state.chunks_display_mode.clone(),
+                        state.environment_display_mode.clone(),
                         window.get_requested_env_canvas_width() as u32,
                         window.get_requested_env_canvas_height() as u32,
                         state.quality_deterioration,

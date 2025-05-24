@@ -1,6 +1,6 @@
 use bugs_lib::{
+    color::Color,
     math::{Matrix, Point, Size},
-    utils::Color,
 };
 use vulkano::padded::Padded;
 

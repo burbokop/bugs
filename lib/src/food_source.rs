@@ -2,7 +2,7 @@ use std::{f64::consts::PI, time::Duration};
 
 use crate::{
     environment::{EnvironmentRequest, FoodCreateInfo},
-    math::{Angle, Complex, NoNeg, Point, Rect, Size},
+    math::{map_into_range_inclusive, Angle, Complex, NoNeg, Point, Rect, Size},
     range::Range,
     time_point::TimePoint,
     utils::{sample_range_from_range, Float},
@@ -75,15 +75,18 @@ impl<T> FoodSource<T> {
                     )));
                 }
                 FoodSourceShape::Circle { radius } => {
+                    let r = rng.random_range(0. ..radius.unwrap());
                     requests.push(EnvironmentRequest::PlaceFood(FoodCreateInfo {
                         position: Complex::from_polar(
-                            rng.random_range(0. ..radius.unwrap()),
+                            r,
                             Angle::from_radians(rng.random_range(0. ..(PI * 2.))),
                         )
                         .into_cartesian(),
-                        energy: NoNeg::wrap(
-                            rng.random_range(sample_range_from_range(self.energy_range)),
-                        )
+                        energy: NoNeg::wrap(map_into_range_inclusive(
+                            r,
+                            0. ..=radius.unwrap(),
+                            rng.random_range(sample_range_from_range(self.energy_range))..=0.,
+                        ))
                         .unwrap(),
                     }));
                 }
