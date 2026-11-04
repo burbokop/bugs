@@ -318,17 +318,14 @@ pub fn main() -> Result<(), PlatformError> {
             let state = weak_state.upgrade().unwrap();
             let mut state = state.try_borrow_mut().unwrap();
 
-            let default_deltas_per_step: Float = 120.;
-
             let angle_delta_to_scale_division = |angle_delta: Float| {
                 let base: Float = 1.2;
-
-                base.powf(angle_delta / default_deltas_per_step)
+                base.powf(angle_delta.signum())
             };
 
             let angle_delta_to_translation_delta = |angle_delta: Float| {
                 let velocity: Float = 10.; // px per step
-                return velocity * angle_delta / default_deltas_per_step;
+                return velocity * angle_delta.signum();
             };
 
             // let delta_y = delta_y / 100.;
@@ -479,7 +476,10 @@ pub fn main() -> Result<(), PlatformError> {
 
                 let mut environment_render_model = state.environment_render_model.borrow_mut();
 
-                if state.do_render {
+                let env_canvas_width = window.get_requested_env_canvas_width() as u32;
+                let env_canvas_height = window.get_requested_env_canvas_height() as u32;
+                // The window may not be laid out yet (e.g. on Wayland), and a 0×0 image panics in the renderer
+                if state.do_render && env_canvas_width > 0 && env_canvas_height > 0 {
                     let texture = environment_render_model.render(
                         &state.environment,
                         &state.camera,
@@ -488,8 +488,8 @@ pub fn main() -> Result<(), PlatformError> {
                         state.tool_action_point,
                         state.tool_action_active,
                         state.environment_display_mode.clone(),
-                        window.get_requested_env_canvas_width() as u32,
-                        window.get_requested_env_canvas_height() as u32,
+                        env_canvas_width,
+                        env_canvas_height,
                         state.quality_deterioration,
                     );
                     window.set_env_canvas(texture);
@@ -546,15 +546,22 @@ pub fn main() -> Result<(), PlatformError> {
 
                     if state.do_render {
                         if let Some(brain_log) = bug.last_brain_log() {
-                            let mut brain_render_model = state.brain_render_model.borrow_mut();
+                            let brain_canvas_width =
+                                window.get_requested_brain_canvas_width() as u32;
+                            let brain_canvas_height =
+                                window.get_requested_brain_canvas_height() as u32;
 
-                            window.set_brain_canvas(brain_render_model.render(
-                                bug.brain(),
-                                brain_log,
-                                state.selected_node,
-                                window.get_requested_brain_canvas_width() as u32,
-                                window.get_requested_brain_canvas_height() as u32,
-                            ));
+                            if brain_canvas_width > 0 && brain_canvas_height > 0 {
+                                let mut brain_render_model = state.brain_render_model.borrow_mut();
+
+                                window.set_brain_canvas(brain_render_model.render(
+                                    bug.brain(),
+                                    brain_log,
+                                    state.selected_node,
+                                    brain_canvas_width,
+                                    brain_canvas_height,
+                                ));
+                            }
 
                             window.set_selected_bug_last_brain_log(BugBrainLog {
                                 input: BugBrainInput {
