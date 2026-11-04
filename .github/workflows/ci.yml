@@ -16,9 +16,9 @@ jobs:
       # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this to true when your workflow is stable.
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04]
+        os: [ubuntu-22.04, ubuntu-24.04]
         build_type: [release, debug]
-        channel: [1.85.0]
+        channel: [1.99.1]
 
     steps:
     - uses: actions/checkout@v3
