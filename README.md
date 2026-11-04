@@ -16,6 +16,11 @@ cargo run --release
 cargo run --release -- new --env-preset circle --renderer sdl
 ```
 
+### Load environment
+```bash
+cargo run --release -- load --renderer sdl
+```
+
 ## Run simulator
 ```bash
 cargo run --release --package bugs-simulator
