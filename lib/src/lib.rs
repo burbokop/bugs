@@ -10,5 +10,6 @@ pub mod environment;
 pub mod food_source;
 pub mod math;
 pub mod range;
+pub mod species;
 pub mod time_point;
 pub mod utils;

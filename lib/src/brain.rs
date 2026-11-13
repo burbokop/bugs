@@ -212,6 +212,12 @@ impl Brain {
             .into()
     }
 
+    /// Raw output activations for an already encoded input vector.
+    pub(crate) fn proceed_raw(&self, input: &[Float; 16]) -> [Float; 8] {
+        let out = self.net.proceed(input, normalizers::fast_fake_sigmoid);
+        std::array::from_fn(|i| out[i])
+    }
+
     pub(crate) fn proceed_verbosely(&self, input: Input) -> VerboseOutput {
         let i = input.into();
         let (r0, r1) = self

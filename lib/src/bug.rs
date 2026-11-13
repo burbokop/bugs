@@ -11,6 +11,7 @@ const EAT_FOOD_MAX_PROXIMITY: NoNeg<Float> = noneg_float(20.);
 
 use crate::chunk::Position;
 use crate::color::Color;
+use crate::species::{Member, Signature, SpeciesTags, Traits};
 use crate::{
     brain::{self, Brain, VerboseOutput},
     environment::{Environment, EnvironmentRequest, Food},
@@ -55,7 +56,10 @@ pub struct BrainLog {
 #[derive(Serialize)]
 pub struct Bug<T> {
     id: usize,
+    species: SpeciesTags,
     chromosome: Chromosome<Float>,
+    #[serde(skip)]
+    signature: Signature,
     #[serde(skip)]
     crc: Float,
     #[serde(skip)]
@@ -108,6 +112,10 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Bug<T> {
         #[derive(Deserialize)]
         struct TmpBug<T> {
             id: usize,
+            /// Missing in saves made before species were introduced.
+            /// `Environment` deserialization reassigns such bugs to a legacy species.
+            #[serde(default)]
+            species: SpeciesTags,
             chromosome: Chromosome<Float>,
             position: Point<Float>,
             rotation: Angle<Float>,
@@ -123,6 +131,7 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Bug<T> {
 
         Ok(Self {
             id: val.id,
+            species: val.species,
             chromosome: val.chromosome,
             crc,
             brain: features.brain,
@@ -139,6 +148,7 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Bug<T> {
             heat_level: val.heat_level,
             vision_range: features.vision_range,
             vision_half_arc: features.vision_half_arc,
+            signature: features.signature,
         })
     }
 }
@@ -156,6 +166,7 @@ impl Error for BugEnergyCapacityExceeded {}
 
 struct GeneticFeatures {
     brain: Brain,
+    signature: Signature,
     max_age: Duration,
     size: NoNeg<Float>,
     color: Color,
@@ -188,8 +199,20 @@ impl GeneticFeatures {
             b: body_genes[6].rem_euclid(1.),
         };
 
+        let signature = Signature::new(
+            &brain,
+            Traits {
+                size: size.unwrap(),
+                max_age_secs: max_age.as_secs_f64(),
+                baby_charge_capacity_per_size: baby_charge_capacity_per_size.unwrap(),
+                vision_range: vision_range.unwrap(),
+                color: &color,
+            },
+        );
+
         GeneticFeatures {
             brain,
+            signature,
             max_age,
             size,
             color,
@@ -203,6 +226,15 @@ impl GeneticFeatures {
 impl<T> Bug<T> {
     pub fn id(&self) -> usize {
         self.id
+    }
+
+    /// Species of this bug according to each speciation method.
+    pub fn species(&self) -> SpeciesTags {
+        self.species
+    }
+
+    pub fn signature(&self) -> &Signature {
+        &self.signature
     }
 
     pub fn chromosome(&self) -> &Chromosome<Float> {
@@ -286,6 +318,7 @@ impl<T> Bug<T> {
 
     pub(crate) fn give_birth(
         next_id: &mut usize,
+        species: SpeciesTags,
         chromosome: Chromosome<Float>,
         position: Point<Float>,
         rotation: Angle<Float>,
@@ -296,6 +329,7 @@ impl<T> Bug<T> {
         let crc = chromosome.genes.iter().sum();
         let result = Self {
             id: *next_id,
+            species,
             chromosome,
             crc,
             brain: features.brain,
@@ -312,6 +346,7 @@ impl<T> Bug<T> {
             heat_level: noneg_float(0.),
             vision_range: features.vision_range,
             vision_half_arc: features.vision_half_arc,
+            signature: features.signature,
         };
 
         *next_id += 1;
@@ -325,6 +360,7 @@ impl<T> Bug<T> {
 
     pub(crate) fn give_birth_with_max_energy(
         next_id: &mut usize,
+        species: SpeciesTags,
         chromosome: Chromosome<Float>,
         position: Point<Float>,
         rotation: Angle<Float>,
@@ -335,6 +371,7 @@ impl<T> Bug<T> {
         *next_id += 1;
         Self {
             id: *next_id - 1,
+            species,
             chromosome,
             crc,
             brain: features.brain,
@@ -351,12 +388,14 @@ impl<T> Bug<T> {
             heat_level: noneg_float(0.),
             vision_range: features.vision_range,
             vision_half_arc: features.vision_half_arc,
+            signature: features.signature,
         }
     }
 
     // Spend all energy to produce as much progeny as possible
     pub(crate) fn give_birth_to_twins(
         next_id: &mut usize,
+        species: SpeciesTags,
         chromosome: Chromosome<Float>,
         position: Point<Float>,
         rotation: Angle<Float>,
@@ -375,6 +414,7 @@ impl<T> Bug<T> {
         for _ in 0..n.unwrap() as usize {
             result.push(Self {
                 id: *next_id,
+                species,
                 chromosome: chromosome.clone(),
                 crc,
                 brain: features.brain.clone(),
@@ -391,6 +431,7 @@ impl<T> Bug<T> {
                 heat_level: noneg_float(0.),
                 vision_range: features.vision_range,
                 vision_half_arc: features.vision_half_arc,
+                signature: features.signature.clone(),
             });
             *next_id += 1;
         }
@@ -399,6 +440,7 @@ impl<T> Bug<T> {
 
         result.push(Self {
             id: *next_id,
+            species,
             chromosome,
             crc,
             brain: features.brain.clone(),
@@ -415,6 +457,7 @@ impl<T> Bug<T> {
             heat_level: noneg_float(0.),
             vision_range: features.vision_range,
             vision_half_arc: features.vision_half_arc,
+            signature: features.signature,
         });
         *next_id += 1;
 
@@ -460,6 +503,7 @@ impl<T> Bug<T> {
         T: Clone,
     {
         EnvironmentRequest::GiveBirth {
+            parent_species: self.species,
             chromosome: self.chromosome.clone().mutated(|_, _| 0.01..0.8, 0.01, rng),
             position: self.position,
             rotation: Angle::from_radians(rng.random_range(0. ..(PI * 2.))),
@@ -639,4 +683,27 @@ impl<T> Bug<T> {
         }
         requests
     }
+}
+
+impl<T> Member for Bug<T> {
+    fn species(&self) -> SpeciesTags {
+        self.species
+    }
+
+    fn set_species(&mut self, tags: SpeciesTags) {
+        self.species = tags;
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn color(&self) -> &Color {
+        &self.color
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn signature_of_chromosome(chromosome: &Chromosome<Float>) -> Signature {
+    GeneticFeatures::from_chromosome(chromosome).signature
 }

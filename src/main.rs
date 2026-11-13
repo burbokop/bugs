@@ -5,6 +5,7 @@ use bugs_lib::color::Color;
 use bugs_lib::env_presets;
 use bugs_lib::environment::SeededEnvironment;
 use bugs_lib::math::{noneg_float, Angle, LerpIntegrator, NoNeg, Point};
+use bugs_lib::species::Method;
 use bugs_lib::time_point::{StaticTimePoint, TimePoint as _};
 use bugs_lib::utils::{pretty_duration, Float};
 use clap::Parser;
@@ -19,10 +20,11 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 mod app_utils;
+mod phylogeny_view;
 mod render;
 
 slint::slint! {
-    export { MainWindow, BugInfo, EnvInfo, DisplayTool } from "src/main.slint";
+    export { MainWindow, BugInfo, EnvInfo, DisplayTool, TreeBar, TreeInfo } from "src/main.slint";
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -75,6 +77,7 @@ struct State {
     do_render: bool,
     desired_tps: Float,
     quality_deterioration: u32,
+    show_phylogeny: bool,
 }
 
 #[derive(Parser)]
@@ -186,6 +189,7 @@ pub fn main() -> Result<(), PlatformError> {
         desired_tps: 30.,
         quality_deterioration: 1,
         display_crc: false,
+        show_phylogeny: false,
     }));
 
     let (ctrl_c_tx, ctrl_c_rx) = std::sync::mpsc::channel();
@@ -411,6 +415,9 @@ pub fn main() -> Result<(), PlatformError> {
                 )
                 .unwrap();
                 true
+            } else if text == "t" {
+                state.show_phylogeny = !state.show_phylogeny;
+                true
             } else if text == " " {
                 state.pause = !state.pause;
                 true
@@ -465,6 +472,7 @@ pub fn main() -> Result<(), PlatformError> {
         let save_path = save_path.clone();
         let mut fps_integrator: LerpIntegrator<Float> = LerpIntegrator::new(0.2);
         let mut tps_integrator: LerpIntegrator<Float> = LerpIntegrator::new(0.2);
+        let mut last_phylogeny_update: Option<Instant> = None;
         render_timer.start(TimerMode::Repeated, render_interval, move || {
             if let Some(window) = weak_window.upgrade() {
                 let now = Instant::now();
@@ -515,10 +523,43 @@ pub fn main() -> Result<(), PlatformError> {
 
                 window.set_active_tool(state.active_tool.into());
 
+                window.set_show_phylogeny(state.show_phylogeny);
+                // Trees change slowly, no need to rebuild them every frame.
+                if state.show_phylogeny
+                    && last_phylogeny_update.is_none_or(|t| now - t > Duration::from_millis(250))
+                {
+                    last_phylogeny_update = Some(now);
+                    let selected_species = state
+                        .selected_bug_id
+                        .and_then(|id| state.environment.find_bug_by_id(id))
+                        .map(|bug| bug.species());
+                    let tree = |method| {
+                        phylogeny_view::tree_info(
+                            state.environment.speciation(),
+                            method,
+                            state.environment.creation_time(),
+                            state.environment.now(),
+                            selected_species.map(|tags| tags.get(method)),
+                        )
+                    };
+                    window.set_incremental_tree(tree(Method::Incremental));
+                    window.set_clustering_tree(tree(Method::Clustering));
+                } else if !state.show_phylogeny {
+                    last_phylogeny_update = None;
+                }
+
                 if let Some(bug) = state
                     .selected_bug_id
                     .and_then(|id| state.environment.find_bug_by_id(id))
                 {
+                    window.set_selected_bug_species(
+                        format!(
+                            "incremental #{}, clustering #{}",
+                            bug.species().incremental,
+                            bug.species().clustering
+                        )
+                        .into(),
+                    );
                     window.set_selected_bug_info(BugInfo {
                         genes: bug
                             .chromosome()

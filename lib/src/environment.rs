@@ -12,6 +12,7 @@ use crate::{
     food_source::{FoodSource, FoodSourceShape},
     math::{noneg_float, Angle, DeltaAngle, NoNeg, Point, Rect},
     range::Range,
+    species::{Member as _, Speciation, SpeciesTags},
     time_point::TimePoint,
     utils::Float,
 };
@@ -205,6 +206,7 @@ impl FoodSourceCreateInfo {
 pub(crate) enum EnvironmentRequest {
     Suicide,
     GiveBirth {
+        parent_species: SpeciesTags,
         chromosome: Chromosome<Float>,
         position: Point<Float>,
         rotation: Angle<Float>,
@@ -220,16 +222,68 @@ pub(crate) enum EnvironmentRequest {
 type FoodChunkedVec = ChunkedVec<Food, 256, 256>;
 type BugsChunkedVec<T> = ChunkedVec<Rc<RefCell<Bug<T>>>, 256, 256>;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize)]
 pub struct Environment<T> {
     food: FoodChunkedVec,
     food_sources: Vec<Rc<RefCell<FoodSource<T>>>>,
     bugs: BugsChunkedVec<T>,
+    speciation: Speciation<T>,
     creation_time: T,
     now: T,
     next_food_id: usize,
     next_bug_id: usize,
     iteration: usize,
+}
+
+impl<'de, T: Deserialize<'de> + Clone> Deserialize<'de> for Environment<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(bound(deserialize = "T: Deserialize<'de>"))]
+        struct TmpEnvironment<T> {
+            food: FoodChunkedVec,
+            food_sources: Vec<Rc<RefCell<FoodSource<T>>>>,
+            bugs: BugsChunkedVec<T>,
+            /// Missing in saves made before species were introduced.
+            #[serde(default)]
+            speciation: Speciation<T>,
+            creation_time: T,
+            now: T,
+            next_food_id: usize,
+            next_bug_id: usize,
+            iteration: usize,
+        }
+
+        let mut val = TmpEnvironment::<T>::deserialize(deserializer)?;
+
+        if val.speciation.is_empty() {
+            // Legacy save: ancestry is unknown, so all living bugs go into a single root species.
+            let mut bugs = val.bugs.iter();
+            if let Some(first) = bugs.next() {
+                val.speciation
+                    .found_lineage(&mut *first.borrow_mut(), &val.creation_time);
+                let legacy = first.borrow().species();
+                for bug in std::iter::once(first).chain(bugs) {
+                    bug.borrow_mut().set_species(legacy);
+                    val.speciation.register_birth(legacy);
+                }
+            }
+        }
+
+        Ok(Self {
+            food: val.food,
+            food_sources: val.food_sources,
+            bugs: val.bugs,
+            speciation: val.speciation,
+            creation_time: val.creation_time,
+            now: val.now,
+            next_food_id: val.next_food_id,
+            next_bug_id: val.next_bug_id,
+            iteration: val.iteration,
+        })
+    }
 }
 
 impl<T> Environment<T> {
@@ -243,7 +297,6 @@ impl<T> Environment<T> {
         T: Clone,
     {
         let mut next_food_id = 0;
-        let mut next_bug_id = 0;
 
         let food = food
             .into_iter()
@@ -255,29 +308,32 @@ impl<T> Environment<T> {
             .into_iter()
             .map(|create_info| Rc::new(RefCell::new(create_info.create(now.clone()))))
             .collect();
-        let bugs = bugs
-            .into_iter()
-            .map(|create_info| {
-                Rc::new(RefCell::new(Bug::give_birth_with_max_energy(
-                    &mut next_bug_id,
-                    create_info.chromosome,
-                    create_info.position,
-                    create_info.rotation,
-                    now.clone(),
-                )))
-            })
-            .collect();
 
-        Self {
+        let mut result = Self {
             food,
             food_sources,
-            bugs,
+            bugs: Default::default(),
+            speciation: Default::default(),
             creation_time: now.clone(),
             now,
-            next_food_id: 0,
+            next_food_id,
             next_bug_id: 0,
             iteration: 0,
+        };
+
+        for create_info in bugs {
+            let bug = Bug::give_birth_with_max_energy(
+                &mut result.next_bug_id,
+                SpeciesTags::default(),
+                create_info.chromosome,
+                create_info.position,
+                create_info.rotation,
+                result.now.clone(),
+            );
+            result.add_founder(bug);
         }
+
+        result
     }
 
     pub fn generate<R: RngCore, Range: SampleRange<Float>>(
@@ -295,7 +351,6 @@ impl<T> Environment<T> {
         T: Clone,
     {
         let mut next_food_id = 0;
-        let mut next_bug_id = 0;
 
         let food = Food::generate_vec(
             &mut next_food_id,
@@ -309,46 +364,50 @@ impl<T> Environment<T> {
             .into_iter()
             .map(|x| Rc::new(RefCell::new(x.create(now.clone()))))
             .collect();
-        let bugs = vec![Rc::new(RefCell::new(
-            Bug::give_birth(
-                &mut next_bug_id,
-                Chromosome {
-                    genes: (0..256)
-                        .map(|i| {
-                            if i == 0 {
-                                1.
-                            } else if i == 128 {
-                                2.
-                            } else if i == 128 + 8 + 8 + 8 {
-                                0.5
-                            // } else if i == 16 + 1 || i == 128 + 8 + 1 {
-                            //     2.
-                            } else if (0..208).contains(&i) {
-                                0.
-                            } else {
-                                1.
-                            }
-                        })
-                        .collect(),
-                },
-                bug_position,
-                Angle::from_radians(rng.random_range(0. ..(PI * 2.))),
-                noneg_float(50.),
-                now.clone(),
-            )
-            .unwrap(),
-        ))];
+        let founder_chromosome = Chromosome {
+            genes: (0..256)
+                .map(|i| {
+                    if i == 0 {
+                        1.
+                    } else if i == 128 {
+                        2.
+                    } else if i == 128 + 8 + 8 + 8 {
+                        0.5
+                    // } else if i == 16 + 1 || i == 128 + 8 + 1 {
+                    //     2.
+                    } else if (0..208).contains(&i) {
+                        0.
+                    } else {
+                        1.
+                    }
+                })
+                .collect(),
+        };
 
-        Self {
+        let mut result = Self {
             food: food.into_iter().collect(),
             food_sources,
-            bugs: bugs.into_iter().collect(),
+            bugs: Default::default(),
+            speciation: Default::default(),
             creation_time: now.clone(),
             now,
-            next_bug_id,
+            next_bug_id: 0,
             next_food_id,
             iteration: 0,
-        }
+        };
+
+        let founder = Bug::give_birth(
+            &mut result.next_bug_id,
+            SpeciesTags::default(),
+            founder_chromosome,
+            bug_position,
+            Angle::from_radians(rng.random_range(0. ..(PI * 2.))),
+            noneg_float(50.),
+            result.now.clone(),
+        )
+        .unwrap();
+        result.add_founder(founder);
+        result
     }
 
     pub fn now(&self) -> &T {
@@ -403,30 +462,42 @@ impl<T> Environment<T> {
             for request in requests {
                 match request {
                     EnvironmentRequest::Suicide => {
-                        let (position, id) = {
+                        let (position, id, species) = {
                             let b = requester.bug_ref().unwrap();
-                            (b.position(), b.id())
+                            (b.position(), b.id(), b.species())
                         };
                         let chunk_found = self
                             .bugs
                             .retain_by_position(position, |x| x.borrow().id() != id);
                         assert!(chunk_found);
+                        self.speciation.register_death(species, &self.now);
                     }
                     EnvironmentRequest::GiveBirth {
+                        parent_species,
                         chromosome,
                         position,
                         rotation,
                         energy_level,
                     } => {
-                        for bug in Bug::give_birth_to_twins(
+                        let mut twins = Bug::give_birth_to_twins(
                             &mut self.next_bug_id,
+                            parent_species,
                             chromosome,
                             position,
                             rotation,
                             energy_level,
                             self.now.clone(),
-                        ) {
-                            self.bugs.push(Rc::new(RefCell::new(bug)));
+                        );
+                        // Twins are genetically identical, so one classification fits all of them.
+                        let species = self.speciation.classify_offspring(
+                            parent_species,
+                            twins[0].signature(),
+                            twins[0].color(),
+                            &self.now,
+                        );
+                        for mut bug in twins.drain(..) {
+                            bug.set_species(species);
+                            self.push_bug(bug);
                         }
                     }
                     EnvironmentRequest::TransferEnergyFromFoodToBug {
@@ -442,6 +513,11 @@ impl<T> Environment<T> {
                         .push(food_create_info.create(&mut self.next_food_id)),
                 }
             }
+        }
+
+        if self.speciation.recluster_due(&self.now) {
+            let mut members: Vec<_> = self.bugs.iter().map(|b| b.borrow_mut()).collect();
+            self.speciation.recluster(&mut members, &self.now);
         }
 
         self.iteration += 1;
@@ -566,42 +642,63 @@ impl<T> Environment<T> {
     where
         T: Clone,
     {
-        self.bugs
-            .push(Rc::new(RefCell::new(Bug::give_birth_with_max_energy(
-                &mut self.next_bug_id,
-                Chromosome {
-                    genes: (0..256)
-                        .map(|i| {
-                            if i == 0 {
-                                2.
-                            } else if i == 128 {
-                                0.
-                            } else if i == 18 {
-                                2.
-                            } else if i == 137 {
-                                2.
-                            } else if i == 33 {
-                                2.
-                            } else if i == 146 {
-                                -2.
-                            } else if i == 202 {
-                                1.
-                            } else if i == 130 {
-                                2.
-                            } else if i == 128 + 8 + 8 + 8 {
-                                2. // baby charge
-                            } else if (0..208).contains(&i) {
-                                0.
-                            } else {
-                                1.
-                            }
-                        })
-                        .collect(),
-                },
-                center,
-                Angle::from_radians(rng.random_range(0. ..(PI * 2.))),
-                self.now.clone(),
-            ))));
+        let chromosome = Chromosome {
+            genes: (0..256)
+                .map(|i| {
+                    if i == 0 {
+                        2.
+                    } else if i == 128 {
+                        0.
+                    } else if i == 18 {
+                        2.
+                    } else if i == 137 {
+                        2.
+                    } else if i == 33 {
+                        2.
+                    } else if i == 146 {
+                        -2.
+                    } else if i == 202 {
+                        1.
+                    } else if i == 130 {
+                        2.
+                    } else if i == 128 + 8 + 8 + 8 {
+                        2. // baby charge
+                    } else if (0..208).contains(&i) {
+                        0.
+                    } else {
+                        1.
+                    }
+                })
+                .collect(),
+        };
+        let bug = Bug::give_birth_with_max_energy(
+            &mut self.next_bug_id,
+            SpeciesTags::default(),
+            chromosome,
+            center,
+            Angle::from_radians(rng.random_range(0. ..(PI * 2.))),
+            self.now.clone(),
+        );
+        self.add_founder(bug);
+    }
+
+    /// Adds a bug with unknown ancestry: it starts a new lineage.
+    fn add_founder(&mut self, mut bug: Bug<T>)
+    where
+        T: Clone,
+    {
+        self.speciation.found_lineage(&mut bug, &self.now);
+        self.push_bug(bug);
+    }
+
+    /// The only way a bug enters the world after construction, so species populations stay in sync.
+    fn push_bug(&mut self, bug: Bug<T>) {
+        self.speciation.register_birth(bug.species());
+        self.bugs.push(Rc::new(RefCell::new(bug)));
+    }
+
+    pub fn speciation(&self) -> &Speciation<T> {
+        &self.speciation
     }
 
     pub fn food_chunks<'a>(&'a self) -> impl Iterator<Item = (ChunkIndex, &'a [Food])> + 'a {
@@ -657,6 +754,7 @@ impl<T> Environment<T> {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(bound(deserialize = "T: Deserialize<'de> + Clone"))]
 pub struct SeededEnvironment<T> {
     env: Environment<T>,
     rng: Pcg64,
@@ -747,5 +845,152 @@ pub mod benchmark_internals {
 
     pub fn find_bug_by_id<T>(env: &Environment<T>, id: usize) -> Option<Rc<RefCell<Bug<T>>>> {
         env.bugs.iter().find(|b| b.borrow().id() == id).cloned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::*;
+    use crate::{
+        env_presets,
+        species::{Method, SpeciesId},
+        time_point::StaticTimePoint,
+    };
+
+    fn assert_species_in_sync<T>(env: &Environment<T>) {
+        for method in [Method::Incremental, Method::Clustering] {
+            let mut counted: HashMap<SpeciesId, usize> = HashMap::new();
+            for bug in env.bugs() {
+                *counted.entry(bug.species().get(method)).or_default() += 1;
+            }
+            let registry = env.speciation().registry(method);
+            for (id, count) in &counted {
+                let species = registry
+                    .get(*id)
+                    .expect("living bug in a forgotten species");
+                assert_eq!(species.population(), *count, "{method:?} {id}");
+            }
+            for species in registry.iter() {
+                let living = counted.get(&species.id()).copied().unwrap_or(0);
+                assert_eq!(species.population(), living, "{method:?} {}", species.id());
+                assert_eq!(species.is_extinct(), living == 0);
+            }
+        }
+    }
+
+    #[test]
+    fn species_population_matches_living_bugs() {
+        let mut env =
+            env_presets::less_food_further_from_center(StaticTimePoint::default(), [7; 32]);
+        env.add_bug((10., 10.).into());
+        env.add_bug((-10., 10.).into());
+        for method in [Method::Incremental, Method::Clustering] {
+            assert_eq!(env.speciation().registry(method).len(), 3);
+        }
+
+        // ~20 simulated minutes
+        for i in 0..36_000 {
+            env.proceed(Duration::from_millis(1000 / 30));
+            if i % 1000 == 0 {
+                assert_species_in_sync(&env);
+            }
+            if env.bugs_count() == 0 {
+                break;
+            }
+        }
+        assert_species_in_sync(&env);
+        assert!(env.bugs_count() > 0);
+        for method in [Method::Incremental, Method::Clustering] {
+            assert!(
+                env.speciation().registry(method).ever_existed() > 3,
+                "{method:?} never split"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod calibration {
+    use super::*;
+    use crate::{env_presets, time_point::StaticTimePoint};
+    use rand::SeedableRng;
+
+    fn quantiles(mut v: Vec<Float>) -> String {
+        v.sort_by(|a, b| a.total_cmp(b));
+        [0.1, 0.25, 0.5, 0.75, 0.9, 0.99]
+            .iter()
+            .map(|q| format!("q{}={:.4}", q, v[((v.len() - 1) as Float * q) as usize]))
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// Helps choosing speciation thresholds: prints distributions of parent-to-child and pairwise
+    /// signature distances and the resulting species counts.
+    /// `cargo test --release -p bugs-lib print_distance_distributions -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn print_distance_distributions() {
+        let mut rng = Pcg64::seed_from_u64(1);
+        for seed in [7u8, 42] {
+            let mut env =
+                env_presets::less_food_further_from_center(StaticTimePoint::default(), [seed; 32]);
+            for minutes in [10, 30, 90] {
+                while env.now().duration_since(env.creation_time())
+                    < Duration::from_secs(minutes * 60)
+                {
+                    env.proceed(Duration::from_millis(1000 / 30));
+                }
+                let bugs: Vec<_> = env
+                    .bugs()
+                    .map(|b| (b.chromosome().clone(), b.signature().clone()))
+                    .collect();
+                let mutation: Vec<Float> = bugs
+                    .iter()
+                    .flat_map(|(c, s)| {
+                        (0..5)
+                            .map(|_| {
+                                let m = c.clone().mutated(|_, _| 0.01..0.8, 0.01, &mut rng);
+                                crate::bug::signature_of_chromosome(&m).distance(s)
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect();
+                let step = (bugs.len() / 300).max(1);
+                let sample: Vec<_> = bugs.iter().step_by(step).collect();
+                let mut pairs = vec![];
+                for a in 0..sample.len() {
+                    for b in a + 1..sample.len() {
+                        pairs.push(sample[a].1.distance(&sample[b].1));
+                    }
+                }
+                let zero = mutation.iter().filter(|d| **d == 0.).count() as Float
+                    / mutation.len() as Float;
+                println!("seed {seed} t={minutes}m bugs={}", bugs.len());
+                println!(
+                    "  parent->child (zero {:.0}%): {}",
+                    zero * 100.,
+                    quantiles(mutation)
+                );
+                println!("  pairwise:                 {}", quantiles(pairs));
+                for method in [
+                    crate::species::Method::Incremental,
+                    crate::species::Method::Clustering,
+                ] {
+                    let r = env.speciation().registry(method);
+                    let alive: Vec<_> = r.alive().map(|s| s.population()).collect();
+                    let big = r.iter().filter(|s| s.peak_population() >= 5).count();
+                    println!(
+                        "  {method:?}: ever={} remembered={} peak>=5: {} alive={} pops={:?}",
+                        r.ever_existed(),
+                        r.len(),
+                        big,
+                        alive.len(),
+                        &alive[..alive.len().min(12)]
+                    );
+                }
+            }
+        }
     }
 }

@@ -48,7 +48,66 @@ export struct EnvInfo {
     food-count: int,
 }
 
+/// A bar or connector of a phylogenetic tree, in coordinates relative to the tree area (0..1).
+export struct TreeBar {
+    x: float,
+    y: float,
+    w: float,
+    h: float,
+    color: color,
+    highlighted: bool,
+}
+
+export struct TreeInfo {
+    title: string,
+    summary: string,
+    bars: [TreeBar],
+}
+
 component Empty {}
+
+component TreeView inherits VerticalLayout {
+    in property <TreeInfo> tree;
+
+    spacing: 2px;
+
+    Text {
+        font-size: FontSizes.body;
+        font-weight: 700;
+        text: root.tree.title;
+    }
+
+    Text {
+        font-size: FontSizes.body;
+        wrap: word-wrap;
+        text: root.tree.summary;
+    }
+
+    area := Rectangle {
+        vertical-stretch: 1;
+        background: #f4f4f4;
+        clip: true;
+
+        for bar in root.tree.bars: Rectangle {
+            x: bar.x * area.width;
+            y: bar.y * area.height;
+            width: max(1px, bar.w * area.width);
+            height: max(1px, bar.h * area.height);
+            background: bar.color;
+            // selected bug's species and its ancestors
+            border-width: bar.highlighted ? 1px : 0px;
+            border-color: #ff6a00;
+        }
+
+        Text {
+            x: 2px;
+            y: parent.height - self.height - 2px;
+            font-size: FontSizes.body;
+            color: #888888;
+            text: "time →";
+        }
+    }
+}
 
 global FontSizes {
     out property <length> header: 16pt;
@@ -82,6 +141,10 @@ export component MainWindow inherits Window {
     in property <BugBrainLog> selected-bug-last-brain-log;
     in property <DisplayTool> active-tool;
     in property <int> quality_deterioration;
+    in property <bool> show-phylogeny;
+    in property <TreeInfo> incremental-tree;
+    in property <TreeInfo> clustering-tree;
+    in property <string> selected-bug-species;
 
     out property <int> requested-env-canvas-width: env-canvas.width / 1phx;
     out property <int> requested-env-canvas-height: env-canvas.height / 1phx;
@@ -157,6 +220,11 @@ export component MainWindow inherits Window {
             Text {
                 font-size: FontSizes.body;
                 text: "id: " + root.selected-bug-info.id;
+            }
+
+            Text {
+                font-size: FontSizes.body;
+                text: "species: " + root.selected-bug-species;
             }
 
             Text {
@@ -441,7 +509,31 @@ export component MainWindow inherits Window {
                 x: parent.width - self.width - 10px;
                 y: 10px;
                 color: #2f4858;
-                text: "Controls:\nWASD - select node\nF - exit selection mode";
+                text: "Controls:\nWASD - select node\nF - exit selection mode\nT - phylogeny view";
+            }
+
+            if root.show-phylogeny: Rectangle {
+                width: parent.width;
+                height: parent.height;
+                background: #ffffff;
+
+                VerticalLayout {
+                    padding: 4px;
+                    spacing: 6px;
+
+                    Text {
+                        font-size: FontSizes.header;
+                        text: "Phylogeny (T to close)";
+                    }
+
+                    TreeView {
+                        tree: root.incremental-tree;
+                    }
+
+                    TreeView {
+                        tree: root.clustering-tree;
+                    }
+                }
             }
         }
     }
